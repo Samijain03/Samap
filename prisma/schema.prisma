@@ -1,0 +1,230 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String          @id @default(cuid())
+  email         String          @unique
+  name          String?
+  passwordHash  String?
+  avatar        String?
+  preferences   UserPreference?
+  courses       Course[]
+  roadmaps      Roadmap[]
+  conversations Conversation[]
+  quizAttempts  QuizAttempt[]
+  activities    ActivityLog[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model UserPreference {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  learningStyle   String   @default("balanced") // beginner, technical, exam-oriented, practical, balanced
+  explanationTone String   @default("friendly") // friendly, academic, concise, socratic
+  alwaysExamples  Boolean  @default(true)
+  preferredModel  String   @default("gemini-1.5-flash")
+  customApiKey    String?
+  theme           String   @default("dark")
+}
+
+model Course {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  code        String?
+  description String?
+  color       String       @default("#6366f1")
+  icon        String       @default("BookOpen")
+  subjects    Subject[]
+  documents   Document[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model Subject {
+  id          String     @id @default(cuid())
+  courseId    String
+  course      Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  chapters    Chapter[]
+  documents   Document[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model Chapter {
+  id          String     @id @default(cuid())
+  subjectId   String
+  subject     Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  title       String
+  order       Int        @default(0)
+  topics      Topic[]
+  createdAt   DateTime   @default(now())
+}
+
+model Topic {
+  id          String     @id @default(cuid())
+  chapterId   String
+  chapter     Chapter    @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  title       String
+  content     String?
+  completed   Boolean    @default(false)
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+}
+
+model Document {
+  id          String          @id @default(cuid())
+  userId      String
+  courseId    String?
+  subjectId   String?
+  course      Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  subject     Subject?        @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  fileName    String
+  fileType    String          // pdf, docx, txt, md
+  fileSize    Int
+  pageCount   Int             @default(1)
+  status      String          @default("ready") // uploading, processing, ready, error
+  chunks      DocumentChunk[]
+  createdAt   DateTime        @default(now())
+}
+
+model DocumentChunk {
+  id          String   @id @default(cuid())
+  documentId  String
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  chunkIndex  Int
+  pageNumber  Int?
+  content     String
+  embedding   String?  // JSON stringified float vector
+  tokenCount  Int      @default(0)
+}
+
+model Conversation {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String    @default("New Study Session")
+  courseId    String?
+  subjectId   String?
+  mode        String    @default("general") // general, course-rag, exam-prep, simplify, quiz
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // user, assistant, system
+  content        String
+  sources        String?      // JSON stringified array of sources/citations
+  studyAction    String?      // explain, summarize, exam-answer, quiz-me, simplify, deep-dive
+  createdAt      DateTime     @default(now())
+}
+
+model Roadmap {
+  id             String           @id @default(cuid())
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  targetRole     String?
+  category       String           // programming, ai-ml, devops, computer-science, etc.
+  difficulty     String           @default("Intermediate")
+  estimatedHours Int              @default(40)
+  nodes          RoadmapNode[]
+  projects       RoadmapProject[]
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+}
+
+model RoadmapNode {
+  id             String   @id @default(cuid())
+  roadmapId      String
+  roadmap        Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  title          String
+  stage          String   // prerequisites, beginner, intermediate, advanced, tools
+  order          Int
+  status         String   @default("not_started") // not_started, in_progress, completed
+  difficulty     String   @default("Beginner")
+  estimatedHours String   @default("3-5 hours")
+  prerequisites  String   @default("[]") // JSON string array
+  description    String
+  keyConcepts    String   @default("[]") // JSON string array
+  resources      String   @default("[]") // JSON string array
+  practiceTasks  String   @default("[]") // JSON string array
+  projectIdeas   String   @default("[]") // JSON string array
+  relatedTopics  String   @default("[]") // JSON string array
+}
+
+model RoadmapProject {
+  id              String   @id @default(cuid())
+  roadmapId       String
+  roadmap         Roadmap  @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+  title           String
+  level           String   // beginner, intermediate, advanced, expert
+  objective       String
+  requirements    String   @default("[]") // JSON string array
+  skillsPracticed String   @default("[]") // JSON string array
+  estimatedTime   String
+  architecture    String?
+  extensions      String   @default("[]") // JSON string array
+}
+
+model Quiz {
+  id          String         @id @default(cuid())
+  userId      String
+  title       String
+  subjectId   String?
+  topic       String
+  difficulty  String         // easy, medium, hard, exam
+  questions   QuizQuestion[]
+  attempts    QuizAttempt[]
+  createdAt   DateTime       @default(now())
+}
+
+model QuizQuestion {
+  id            String   @id @default(cuid())
+  quizId        String
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  type          String   // mcq, true_false, short_answer, code
+  question      String
+  options       String?  // JSON string array for MCQ
+  correctAnswer String
+  explanation   String
+  points        Int      @default(1)
+}
+
+model QuizAttempt {
+  id        String   @id @default(cuid())
+  quizId    String
+  quiz      Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score     Float
+  maxScore  Float
+  answers   String   // JSON stringified user responses
+  feedback  String?  // JSON stringified feedback & weak areas
+  createdAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // chat, roadmap_progress, quiz_completed, course_added, file_uploaded
+  title     String
+  details   String?
+  createdAt DateTime @default(now())
+}

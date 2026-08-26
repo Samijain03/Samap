@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 222 47% 5%;
+    --foreground: 210 40% 98%;
+    --card: 224 71% 4%;
+    --card-foreground: 210 40% 98%;
+    --popover: 224 71% 4%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 217 33% 12%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 10%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 217 33% 14%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 14%;
+    --input: 217 33% 14%;
+    --ring: 239 84% 67%;
+    --radius: 1rem;
+  }
+
+  .light {
+    --background: 0 0% 99%;
+    --foreground: 224 71% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 224 71% 4%;
+    --primary: 239 84% 67%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 239 84% 67%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-brand-500/30 selection:text-brand-200;
+    background-color: #080c14;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-size: 32px 32px;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Tactile micro-interactions */
+.tactile-button {
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.tactile-button:active {
+  transform: scale(0.97);
+}
+
+/* Clean Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
+/* Glassmorphism & Hairline borders */
+.glass-panel {
+  background: rgba(11, 15, 25, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.hairline-border {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* KaTeX equations scroll wrapper */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+}
+
+/* Study Typography */
+.prose-study {
+  line-height: 1.75;
+}
+.prose-study p {
+  margin-bottom: 0.85rem;
+}
+.prose-study h1, .prose-study h2, .prose-study h3 {
+  font-weight: 600;
+  color: #ffffff;
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
