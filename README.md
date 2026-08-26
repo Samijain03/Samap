@@ -92,7 +92,7 @@
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/your-username/samap-study-companion.git
+git clone https://github.com/Samijain03/Samap.git
 cd samap-study-companion
 npm install
 ```
