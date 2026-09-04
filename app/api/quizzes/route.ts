@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import aiService from '@/lib/ai/provider';
+import { getAuthenticatedUser } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const user = await prisma.user.findFirst();
+    const user = await getAuthenticatedUser();
     if (!user) return NextResponse.json({ quizzes: [] });
 
     const quizzes = await prisma.quiz.findMany({
@@ -35,8 +38,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await prisma.user.findFirst();
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const user = await getAuthenticatedUser();
+    if (!user) return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
 
     const body = await req.json();
     const { topic, subjectId, difficulty = 'medium', questionCount = 5, contextText } = body;

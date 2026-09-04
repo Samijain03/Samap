@@ -3,14 +3,13 @@ import prisma from '@/lib/prisma';
 import aiService from '@/lib/ai/provider';
 import { searchCourseDocuments } from '@/lib/rag/vector-store';
 import { SourceCitation, UserPreferences } from '@/lib/types';
+import { getAuthenticatedUser } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await prisma.user.findFirst({
-      include: { preferences: true },
-    });
+    const user = await getAuthenticatedUser();
 
     if (!user) {
       return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });

@@ -16,6 +16,7 @@ import {
   Brain,
   Zap,
   Plus,
+  Trash2,
 } from "lucide-react";
 import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
@@ -104,6 +105,20 @@ function QuizzesContent() {
       ...prev,
       [questionId]: answer,
     }));
+  };
+
+  const deleteQuiz = async (quizId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await fetch(`/api/quizzes/${quizId}`, { method: "DELETE" });
+      const updated = quizzes.filter((q) => q.id !== quizId);
+      setQuizzes(updated);
+      if (activeQuiz?.id === quizId) {
+        setActiveQuiz(null);
+      }
+    } catch (err) {
+      console.error("Error deleting quiz:", err);
+    }
   };
 
   const handleGenerateQuiz = async (e: React.FormEvent) => {
@@ -486,12 +501,21 @@ function QuizzesContent() {
                   Topic: {quiz.topic}
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-5 pt-0">
+              <CardContent className="p-5 pt-0 flex items-center gap-2">
                 <Button
                   onClick={() => startQuiz(quiz)}
-                  className="w-full rounded-xl bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 text-xs font-semibold gap-1.5 transition-all"
+                  className="flex-1 rounded-xl bg-amber-600/20 hover:bg-amber-600 text-amber-300 hover:text-white border border-amber-500/30 text-xs font-semibold gap-1.5 transition-all"
                 >
                   <Zap className="w-3.5 h-3.5" /> Start Quiz
+                </Button>
+                <Button
+                  variant="outline"
+                  size="iconSm"
+                  onClick={(e) => deleteQuiz(quiz.id, e)}
+                  className="rounded-xl border-slate-800 hover:border-rose-500/30 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                  title="Delete quiz"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </CardContent>
             </Card>

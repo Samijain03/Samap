@@ -56,3 +56,36 @@ export async function getSessionUser() {
     return null;
   }
 }
+
+export async function getAuthenticatedUser() {
+  const sessionUser = await getSessionUser();
+  if (sessionUser) return sessionUser;
+
+  // Fallback to demo user if present
+  let fallback = await prisma.user.findFirst({
+    include: { preferences: true },
+  });
+
+  if (!fallback) {
+    fallback = await prisma.user.create({
+      data: {
+        id: 'demo-user-1',
+        email: 'alex.rivera@delusional.edu',
+        name: 'Alex Rivera',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        preferences: {
+          create: {
+            learningStyle: 'balanced',
+            explanationTone: 'friendly',
+            alwaysExamples: true,
+            preferredModel: 'gemini-1.5-flash',
+            theme: 'dark',
+          },
+        },
+      },
+      include: { preferences: true },
+    });
+  }
+
+  return fallback;
+}

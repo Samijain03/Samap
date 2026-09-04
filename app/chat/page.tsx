@@ -16,6 +16,11 @@ import {
   Bot,
   User,
   Zap,
+  Copy,
+  Check,
+  Square,
+  Menu,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
@@ -42,9 +47,12 @@ function ChatContent() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [streamingSources, setStreamingSources] = useState<SourceCitation[]>([]);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load initial courses and conversations
   useEffect(() => {
@@ -83,8 +91,17 @@ function ChatContent() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingContent]);
 
+  // Auto resize textarea
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = "auto";
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 120)}px`;
+    }
+  }, [inputPrompt]);
+
   const selectConversation = async (convId: string) => {
     setActiveConversationId(convId);
+    setMobileSidebarOpen(false);
     try {
       const res = await fetch(`/api/chat/conversations/${convId}`);
       const data = await res.json();
@@ -106,6 +123,7 @@ function ChatContent() {
     setActiveConversationId(null);
     setMessages([]);
     setInputPrompt("");
+    setMobileSidebarOpen(false);
     inputRef.current?.focus();
   };
 
@@ -125,6 +143,19 @@ function ChatContent() {
     } catch (err) {
       console.error("Error deleting session:", err);
     }
+  };
+
+  const stopGenerating = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setIsStreaming(false);
+    }
+  };
+
+  const handleCopy = (content: string, id: string) => {
+    navigator.clipboard.writeText(content);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
   };
 
   const sendMessage = async (
@@ -153,10 +184,13 @@ function ChatContent() {
     setStreamingContent("");
     setStreamingSources([]);
 
+    abortControllerRef.current = new AbortController();
+
     try {
       const response = await fetch("/api/chat/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: abortControllerRef.current.signal,
         body: JSON.stringify({
           prompt,
           conversationId: activeConversationId || undefined,
@@ -209,8 +243,6 @@ function ChatContent() {
                 setStreamingContent((prev) => prev + data.text);
               }
             } catch (e) {}
-          } else if (line.startsWith("event: done")) {
-            // Done
           }
         }
       }
@@ -234,8 +266,10 @@ function ChatContent() {
       const convsRes = await fetch("/api/chat/conversations");
       const convsData = await convsRes.json();
       setConversations(convsData.conversations || []);
-    } catch (err) {
-      console.error("Streaming error:", err);
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        console.error("Streaming error:", err);
+      }
     } finally {
       setIsStreaming(false);
     }
@@ -249,16 +283,28 @@ function ChatContent() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] bg-slate-950 overflow-hidden">
-      {/* Left Sidebar: Study Sessions (Hidden on mobile) */}
-      <div className="hidden lg:flex flex-col w-72 border-r border-slate-800/80 bg-slate-950/60 p-4 space-y-4 shrink-0">
-        <Button
-          onClick={startNewConversation}
-          className="w-full bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold gap-2 shadow-md shadow-brand-600/20"
-        >
-          <Plus className="w-4 h-4" />
-          New Study Session
-        </Button>
+    <div className="flex h-[calc(100vh-4rem)] bg-[#080c14] overflow-hidden relative">
+      {/* Left Sidebar: Study Sessions */}
+      <div
+        className={`${
+          mobileSidebarOpen ? "flex" : "hidden"
+        } lg:flex flex-col w-72 border-r border-white/[0.08] bg-slate-950/80 backdrop-blur-xl p-4 space-y-4 shrink-0 absolute lg:relative inset-y-0 left-0 z-30 shadow-2xl lg:shadow-none`}
+      >
+        <div className="flex items-center justify-between">
+          <Button
+            onClick={startNewConversation}
+            className="flex-1 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold gap-2 shadow-md shadow-brand-600/20 mr-2"
+          >
+            <Plus className="w-4 h-4" />
+            New Session
+          </Button>
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            className="lg:hidden p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
 
         {/* Course Scope Selector */}
         <div className="space-y-1.5">
@@ -320,7 +366,25 @@ function ChatContent() {
       </div>
 
       {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col min-w-0 bg-slate-950/40 relative">
+      <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
+        {/* Mobile Header Bar with Session Toggle */}
+        <div className="lg:hidden px-4 py-2.5 border-b border-white/[0.08] bg-slate-950/60 flex items-center justify-between">
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="flex items-center gap-2 text-xs font-semibold text-slate-300 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800"
+          >
+            <Menu className="w-3.5 h-3.5" />
+            <span>Study Sessions</span>
+          </button>
+          <Button
+            size="sm"
+            onClick={startNewConversation}
+            className="h-8 text-xs bg-brand-600 hover:bg-brand-500 text-white rounded-xl"
+          >
+            <Plus className="w-3.5 h-3.5 mr-1" /> New
+          </Button>
+        </div>
+
         {/* Messages Stream Container */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
           {messages.length === 0 && !isStreaming && (
@@ -368,7 +432,7 @@ function ChatContent() {
                       setSelectedAction(sample.action);
                       sendMessage(sample.title, sample.action);
                     }}
-                    className="p-3.5 rounded-2xl bg-slate-900/60 hover:bg-slate-900 border border-slate-800/80 hover:border-brand-500/40 text-left transition-all group"
+                    className="p-3.5 rounded-2xl bg-slate-900/60 hover:bg-slate-900 border border-white/[0.08] hover:border-brand-500/40 text-left transition-all group active:scale-[0.98]"
                   >
                     <div className="text-xs font-semibold text-white group-hover:text-brand-300 transition-colors">
                       {sample.title}
@@ -395,10 +459,10 @@ function ChatContent() {
               )}
 
               <div
-                className={`rounded-2xl p-4 md:p-5 max-w-[90%] md:max-w-[85%] ${
+                className={`rounded-2xl p-4 md:p-5 max-w-[90%] md:max-w-[85%] relative group ${
                   msg.role === "user"
                     ? "bg-brand-600 text-white shadow-md shadow-brand-600/20"
-                    : "bg-slate-900/90 border border-slate-800/80 text-slate-100 shadow-xl"
+                    : "bg-slate-900/90 border border-white/[0.08] text-slate-100 shadow-xl"
                 }`}
               >
                 {msg.studyAction && msg.role === "user" && (
@@ -415,6 +479,27 @@ function ChatContent() {
                   <>
                     <MarkdownRenderer content={msg.content} />
                     {msg.sources && <SourceCitations sources={msg.sources} />}
+
+                    {/* Copy message button */}
+                    <div className="pt-2 flex items-center justify-end">
+                      <button
+                        onClick={() => handleCopy(msg.content, msg.id)}
+                        className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-800"
+                        title="Copy markdown text"
+                      >
+                        {copiedId === msg.id ? (
+                          <>
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span className="text-emerald-400 font-medium">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </>
                 )}
               </div>
@@ -433,7 +518,7 @@ function ChatContent() {
               <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 flex items-center justify-center shrink-0 shadow-md">
                 <Bot className="w-4 h-4 text-white animate-pulse" />
               </div>
-              <div className="rounded-2xl p-4 md:p-5 max-w-[90%] md:max-w-[85%] bg-slate-900/90 border border-slate-800/80 text-slate-100 shadow-xl">
+              <div className="rounded-2xl p-4 md:p-5 max-w-[90%] md:max-w-[85%] bg-slate-900/90 border border-white/[0.08] text-slate-100 shadow-xl">
                 {streamingContent ? (
                   <>
                     <MarkdownRenderer content={streamingContent} />
@@ -455,7 +540,7 @@ function ChatContent() {
         </div>
 
         {/* Bottom Input Box Area */}
-        <div className="p-3 md:p-4 border-t border-slate-800/80 bg-slate-950/80 backdrop-blur-xl shrink-0">
+        <div className="p-3 md:p-4 border-t border-white/[0.08] bg-slate-950/80 backdrop-blur-xl shrink-0">
           <div className="max-w-3xl mx-auto space-y-2">
             {/* Quick Action Preset Chips */}
             <StudyActionChips
@@ -469,7 +554,7 @@ function ChatContent() {
                 e.preventDefault();
                 sendMessage();
               }}
-              className="relative flex items-center"
+              className="relative flex items-end"
             >
               <textarea
                 ref={inputRef}
@@ -478,20 +563,30 @@ function ChatContent() {
                 onChange={(e) => setInputPrompt(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask a course question, request an exam answer, or quiz me..."
-                className="w-full resize-none py-3.5 pl-4 pr-14 rounded-2xl bg-slate-900/90 border border-slate-800 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all max-h-32"
+                className="w-full resize-none py-3.5 pl-4 pr-16 rounded-2xl bg-slate-900/90 border border-white/[0.08] text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all leading-normal"
               />
-              <Button
-                type="submit"
-                disabled={!inputPrompt.trim() || isStreaming}
-                size="iconSm"
-                className="absolute right-2.5 h-9 w-9 rounded-xl bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-40 shadow-md"
-              >
+              <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
                 {isStreaming ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Button
+                    type="button"
+                    size="iconSm"
+                    onClick={stopGenerating}
+                    className="h-9 w-9 rounded-xl bg-rose-600 hover:bg-rose-500 text-white shadow-md"
+                    title="Stop generation"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-current" />
+                  </Button>
                 ) : (
-                  <Send className="w-4 h-4" />
+                  <Button
+                    type="submit"
+                    disabled={!inputPrompt.trim()}
+                    size="iconSm"
+                    className="h-9 w-9 rounded-xl bg-brand-600 hover:bg-brand-500 text-white disabled:opacity-40 shadow-md transition-all active:scale-95"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
                 )}
-              </Button>
+              </div>
             </form>
           </div>
         </div>

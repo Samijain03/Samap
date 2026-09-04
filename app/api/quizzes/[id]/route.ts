@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { getAuthenticatedUser } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(
   req: NextRequest,
@@ -45,8 +48,8 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const user = await prisma.user.findFirst();
-    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    const user = await getAuthenticatedUser();
+    if (!user) return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
 
     const quiz = await prisma.quiz.findUnique({
       where: { id: params.id },
@@ -119,5 +122,24 @@ export async function POST(
   } catch (error) {
     console.error('Error submitting quiz attempt:', error);
     return NextResponse.json({ error: 'Failed to submit quiz attempt' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const user = await getAuthenticatedUser();
+    if (!user) return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
+
+    await prisma.quiz.delete({
+      where: { id: params.id },
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting quiz:', error);
+    return NextResponse.json({ error: 'Failed to delete quiz' }, { status: 500 });
   }
 }

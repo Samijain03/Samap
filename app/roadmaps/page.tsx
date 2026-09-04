@@ -20,6 +20,7 @@ import {
   Plus,
   Compass,
   Check,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -115,6 +116,20 @@ function RoadmapsContent() {
     }
   };
 
+  const deleteRoadmap = async (roadmapId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await fetch(`/api/roadmaps/${roadmapId}`, { method: "DELETE" });
+      const updated = roadmaps.filter((r) => r.id !== roadmapId);
+      setRoadmaps(updated);
+      if (selectedRoadmap?.id === roadmapId) {
+        setSelectedRoadmap(updated.length > 0 ? updated[0] : null);
+      }
+    } catch (err) {
+      console.error("Failed to delete roadmap:", err);
+    }
+  };
+
   const updateNodeStatus = async (nodeId: string, newStatus: RoadmapNodeStatus) => {
     if (!selectedRoadmap) return;
 
@@ -133,6 +148,19 @@ function RoadmapsContent() {
       setRoadmaps((prev) =>
         prev.map((r) => (r.id === selectedRoadmap.id ? updatedRoadmap : r))
       );
+
+      // Check for 100% completion
+      const completedCount = updatedNodes.filter((n) => n.status === "completed").length;
+      if (completedCount === updatedNodes.length && updatedNodes.length > 0) {
+        try {
+          const confetti = (await import("canvas-confetti")).default;
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
+        } catch (e) {}
+      }
 
       await fetch(`/api/roadmaps/nodes/${nodeId}/status`, {
         method: "PATCH",
@@ -249,7 +277,7 @@ function RoadmapsContent() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <Badge variant="emerald" className="text-[10px]">
                           {r.difficulty}
@@ -265,6 +293,14 @@ function RoadmapsContent() {
                         {r.targetRole || "Specialist"} • {r.estimatedHours}h
                       </p>
                     </div>
+
+                    <button
+                      onClick={(e) => deleteRoadmap(r.id, e)}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
+                      title="Delete roadmap"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
 
                   <Progress value={progress} className="h-1 bg-slate-800 mt-3" />

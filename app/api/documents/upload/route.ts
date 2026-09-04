@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { parseDocument } from '@/lib/rag/parser';
 import { chunkText } from '@/lib/rag/vector-store';
+import { getAuthenticatedUser } from '@/lib/auth';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await prisma.user.findFirst();
+    const user = await getAuthenticatedUser();
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
     }
 
     const formData = await req.formData();

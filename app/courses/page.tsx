@@ -158,6 +158,16 @@ function CoursesContent() {
     }
   };
 
+  const deleteDocument = async (docId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await fetch(`/api/documents/${docId}`, { method: "DELETE" });
+      fetchCourses();
+    } catch (err) {
+      console.error("Failed to delete document:", err);
+    }
+  };
+
   const toggleTopic = async (topicId: string) => {
     try {
       const res = await fetch(`/api/topics/${topicId}/toggle`, {
@@ -411,9 +421,18 @@ function CoursesContent() {
                           </p>
                         </div>
                       </div>
-                      <Badge variant="emerald" className="text-[10px] shrink-0 font-mono">
-                        Indexed
-                      </Badge>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Badge variant="emerald" className="text-[10px] font-mono">
+                          Indexed
+                        </Badge>
+                        <button
+                          onClick={(e) => deleteDocument(doc.id, e)}
+                          className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Delete document from RAG index"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

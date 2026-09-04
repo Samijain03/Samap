@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { GlobalSearchResult } from '@/lib/types';
+import { getAuthenticatedUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ results: [] });
     }
 
-    const user = await prisma.user.findFirst();
+    const user = await getAuthenticatedUser();
     if (!user) return NextResponse.json({ results: [] });
 
     const results: GlobalSearchResult[] = [];
