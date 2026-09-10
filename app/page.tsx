@@ -18,6 +18,7 @@ import {
   Plus,
   Compass,
   FileText,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,23 +40,27 @@ export default function DashboardPage() {
   const [selectedAction, setSelectedAction] = useState<string | null>("explain");
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [roadmaps, setRoadmaps] = useState<RoadmapItem[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchData() {
       try {
-        const [coursesRes, roadmapsRes, analyticsRes] = await Promise.all([
+        const [coursesRes, roadmapsRes, analyticsRes, examsRes] = await Promise.all([
           fetch("/api/courses"),
           fetch("/api/roadmaps"),
           fetch("/api/analytics"),
+          fetch("/api/exams"),
         ]);
         const coursesData = await coursesRes.json();
         const roadmapsData = await roadmapsRes.json();
         const analyticsData = await analyticsRes.json();
+        const examsData = await examsRes.json();
 
         setCourses(coursesData.courses || []);
         setRoadmaps(roadmapsData.roadmaps || []);
+        setExams(examsData.exams || []);
         setActivities(analyticsData.analytics?.recentActivities || []);
       } catch (err) {
         console.error("Dashboard fetch error:", err);
@@ -120,10 +125,10 @@ export default function DashboardPage() {
                 <span className="text-xs text-slate-400">Samap Engine v2.0</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white">
-                Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-300 to-indigo-300">Alex Rivera</span>
+                Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-300 to-indigo-300">{user?.name || "Scholar"}</span>
               </h1>
               <p className="text-sm text-slate-400 mt-1">
-                What are we mastering today? Ask questions across your verified course notes or generate learning roadmaps.
+                What are we mastering today? Ask questions across your verified course notes or prepare with daily revision timetables.
               </p>
             </div>
 
@@ -137,6 +142,31 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Upcoming Exam Countdown Banner */}
+          {exams.length > 0 && (
+            <div
+              onClick={() => router.push("/exam-planner")}
+              className="p-3.5 rounded-2xl bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-brand-500/10 border border-rose-500/30 flex items-center justify-between cursor-pointer hover:border-rose-500/50 transition-all group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  <Calendar className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-white group-hover:text-rose-300 transition-colors">
+                    Upcoming Target: {exams[0].title}
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    Exam Date: {new Date(exams[0].examDate).toLocaleDateString()} • Target: {exams[0].targetScore || "Grade A"}
+                  </div>
+                </div>
+              </div>
+              <span className="text-xs text-rose-300 font-semibold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                Open Timetable <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </div>
+          )}
 
           {/* Quick AI Search Form */}
           <form onSubmit={handleQuickAsk} className="mt-4 space-y-3">

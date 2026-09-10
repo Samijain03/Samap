@@ -16,6 +16,7 @@ import {
   ChevronRight,
   LogOut,
   UserCheck,
+  Calendar,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +32,7 @@ import {
 const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "My Courses", href: "/courses", icon: BookOpen, badge: "RAG" },
+  { name: "Exam Planner", href: "/exam-planner", icon: Calendar, badge: "AI" },
   { name: "Roadmaps", href: "/roadmaps", icon: Map, badge: "AI" },
   { name: "AI Study Chat", href: "/chat", icon: Sparkles, highlight: true },
   { name: "Quiz Mode", href: "/quizzes", icon: Award },

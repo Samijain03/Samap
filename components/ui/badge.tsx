@@ -9,6 +9,8 @@ const badgeVariants = cva(
       variant: {
         default:
           "border-transparent bg-brand-500/20 text-brand-300 border-brand-500/30",
+        brand:
+          "border-transparent bg-brand-500/20 text-brand-300 border-brand-500/30",
         secondary:
           "border-transparent bg-slate-800 text-slate-300",
         destructive:

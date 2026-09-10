@@ -19,6 +19,13 @@ import {
   ChevronRight,
   Layers,
   FileCode,
+  Edit3,
+  BookmarkCheck,
+  Printer,
+  Copy,
+  Check,
+  Brain,
+  HelpCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -34,6 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import { CourseItem, SubjectItem, ChapterItem, TopicItem, DocumentItem } from "@/lib/types";
 import { formatBytes } from "@/lib/utils";
+import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 
 function CoursesContent() {
   const router = useRouter();
@@ -58,6 +66,21 @@ function CoursesContent() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+
+  // Topic Study Studio Modal State
+  const [studyStudioOpen, setStudyStudioOpen] = useState(false);
+  const [activeTopic, setActiveTopic] = useState<TopicItem | null>(null);
+  const [topicBreakdown, setTopicBreakdown] = useState<any>(null);
+  const [topicNoteContent, setTopicNoteContent] = useState("");
+  const [loadingBreakdown, setLoadingBreakdown] = useState(false);
+  const [savingNote, setSavingNote] = useState(false);
+  const [activeStudioTab, setActiveStudioTab] = useState<"breakdown" | "notes" | "quickcheck">("breakdown");
+
+  // Cheat Sheet Modal State
+  const [cheatSheetOpen, setCheatSheetOpen] = useState(false);
+  const [cheatSheetContent, setCheatSheetContent] = useState("");
+  const [loadingCheatSheet, setLoadingCheatSheet] = useState(false);
+  const [copiedCheatSheet, setCopiedCheatSheet] = useState(false);
 
   useEffect(() => {
     fetchCourses();
@@ -168,14 +191,14 @@ function CoursesContent() {
     }
   };
 
-  const toggleTopic = async (topicId: string) => {
+  const toggleTopic = async (topicId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     try {
       const res = await fetch(`/api/topics/${topicId}/toggle`, {
         method: "POST",
       });
       const data = await res.json();
       if (data.topic) {
-        // Update local state optimistically
         setCourses((prevCourses) =>
           prevCourses.map((c) => ({
             ...c,
@@ -215,6 +238,68 @@ function CoursesContent() {
     }
   };
 
+  const openStudyStudio = async (topic: TopicItem) => {
+    setActiveTopic(topic);
+    setStudyStudioOpen(true);
+    setLoadingBreakdown(true);
+    setActiveStudioTab("breakdown");
+
+    try {
+      const [breakdownRes, noteRes] = await Promise.all([
+        fetch(`/api/topics/${topic.id}/breakdown`, { method: "POST" }),
+        fetch(`/api/topics/${topic.id}/notes`),
+      ]);
+
+      const breakdownData = await breakdownRes.json();
+      const noteData = await noteRes.json();
+
+      setTopicBreakdown(breakdownData.breakdown || null);
+      setTopicNoteContent(noteData.note?.content || "");
+    } catch (err) {
+      console.error("Failed to load topic studio:", err);
+    } finally {
+      setLoadingBreakdown(false);
+    }
+  };
+
+  const saveTopicNote = async () => {
+    if (!activeTopic) return;
+    try {
+      setSavingNote(true);
+      await fetch(`/api/topics/${activeTopic.id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: topicNoteContent }),
+      });
+    } catch (err) {
+      console.error("Failed to save note:", err);
+    } finally {
+      setSavingNote(false);
+    }
+  };
+
+  const openCheatSheet = async () => {
+    if (!selectedCourse) return;
+    setCheatSheetOpen(true);
+    setLoadingCheatSheet(true);
+
+    try {
+      const res = await fetch(`/api/courses/${selectedCourse.id}/cheatsheet`);
+      const data = await res.json();
+      setCheatSheetContent(data.markdown || "");
+    } catch (err) {
+      console.error("Failed to fetch cheatsheet:", err);
+    } finally {
+      setLoadingCheatSheet(false);
+    }
+  };
+
+  const copyCheatSheet = () => {
+    navigator.clipboard.writeText(cheatSheetContent);
+    setCopiedCheatSheet(true);
+    setTimeout(() => setCopiedCheatSheet(false), 2000);
+  };
+
   const getCourseCompletion = (course: CourseItem) => {
     const allTopics = course.subjects?.flatMap((s) => s.chapters?.flatMap((c) => c.topics) || []) || [];
     if (allTopics.length === 0) return 0;
@@ -241,7 +326,7 @@ function CoursesContent() {
             <h1 className="text-2xl font-bold tracking-tight text-white">My Courses & Syllabus</h1>
           </div>
           <p className="text-sm text-slate-400 mt-1">
-            Organize subjects, upload lecture notes/PDFs, and ask questions with deep RAG context.
+            Organize subjects, upload lecture notes/PDFs, and master topics with interactive studio breakdowns.
           </p>
         </div>
 
@@ -258,17 +343,17 @@ function CoursesContent() {
 
           <Button
             onClick={() => setNewCourseModalOpen(true)}
-            className="rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs md:text-sm font-medium gap-1.5 shadow-md shadow-brand-600/20"
+            className="rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs md:text-sm font-semibold gap-1.5 shadow-md shadow-brand-600/20"
           >
             <Plus className="w-4 h-4" />
-            Add Course
+            New Course
           </Button>
         </div>
       </div>
 
-      {/* Main Split Layout: Course Tabs / Sidebar + Detail View */}
+      {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column: Course Selector (3 Cols) */}
+        {/* Left 4 Cols: Course Selection List */}
         <div className="lg:col-span-4 space-y-3">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">
             Enrolled Courses ({courses.length})
@@ -277,14 +362,18 @@ function CoursesContent() {
           <div className="space-y-2.5">
             {courses.map((course) => {
               const isSelected = selectedCourse?.id === course.id;
-              const progress = getCourseCompletion(course);
+              const completion = getCourseCompletion(course);
 
               return (
                 <div
                   key={course.id}
                   onClick={() => {
                     setSelectedCourse(course);
-                    setSelectedSubject(course.subjects?.[0] || null);
+                    if (course.subjects && course.subjects.length > 0) {
+                      setSelectedSubject(course.subjects[0]);
+                    } else {
+                      setSelectedSubject(null);
+                    }
                   }}
                   className={`p-4 rounded-2xl border transition-all cursor-pointer ${
                     isSelected
@@ -293,43 +382,41 @@ function CoursesContent() {
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1 min-w-0">
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        {course.code && (
-                          <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0">
-                            {course.code}
-                          </Badge>
-                        )}
-                        <span className="text-xs text-brand-400 font-semibold">
-                          {progress}%
+                        <Badge variant="outline" className="text-[10px] font-mono">
+                          {course.code || "CS"}
+                        </Badge>
+                        <span className="text-xs font-semibold text-brand-400">
+                          {completion}% Done
                         </span>
                       </div>
-                      <h3 className="font-semibold text-sm text-white truncate">
+                      <h3 className="font-semibold text-sm text-white mt-1 truncate">
                         {course.title}
                       </h3>
-                      {course.description && (
-                        <p className="text-xs text-slate-400 line-clamp-2">
-                          {course.description}
-                        </p>
-                      )}
+                      <p className="text-xs text-slate-400 truncate">
+                        {course.subjects?.length || 0} Subjects • {course.documents?.length || 0} Notes
+                      </p>
                     </div>
+                    <ChevronRight
+                      className={`w-4 h-4 text-slate-500 mt-1 transition-transform ${
+                        isSelected ? "text-brand-400 translate-x-0.5" : ""
+                      }`}
+                    />
                   </div>
 
-                  <div className="mt-3 pt-2.5 border-t border-slate-800/60 flex items-center justify-between text-[11px] text-slate-400">
-                    <span>{course.subjects?.length || 0} Subjects</span>
-                    <span>{course.documents?.length || 0} Docs Indexed</span>
-                  </div>
+                  <Progress value={completion} className="h-1 bg-slate-800 mt-3" />
                 </div>
               );
             })}
           </div>
         </div>
 
-        {/* Right Column: Selected Course & Subject Details (8 Cols) */}
+        {/* Right 8 Cols: Selected Course Details */}
         {selectedCourse ? (
           <div className="lg:col-span-8 space-y-6">
             {/* Course Header Banner */}
-            <div className="p-6 rounded-3xl border border-slate-800 bg-slate-900/40 backdrop-blur-md space-y-4">
+            <div className="p-6 rounded-3xl border border-white/[0.08] bg-slate-900/40 backdrop-blur-md space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
@@ -345,7 +432,16 @@ function CoursesContent() {
                   </h2>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={openCheatSheet}
+                    variant="outline"
+                    className="border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-xl text-xs gap-1.5"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-amber-400" />
+                    Exam Cheat Sheet
+                  </Button>
                   <Button
                     size="sm"
                     onClick={() => router.push(`/chat?courseId=${selectedCourse.id}`)}
@@ -391,7 +487,7 @@ function CoursesContent() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-400" />
-                  <h3 className="text-sm font-semibold text-white">Course Documents & Notes</h3>
+                  <h3 className="text-sm font-semibold text-white">Course Documents & Notes (RAG)</h3>
                 </div>
                 <button
                   onClick={() => setUploadModalOpen(true)}
@@ -454,7 +550,7 @@ function CoursesContent() {
               )}
             </div>
 
-            {/* Chapters & Topics Checklist */}
+            {/* Chapters & Topics Syllabus Tree */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -463,17 +559,20 @@ function CoursesContent() {
                     Syllabus Breakdown: {selectedSubject?.title || "Chapters"}
                   </h3>
                 </div>
+                <span className="text-xs text-slate-400">
+                  Click any topic to open Study Studio
+                </span>
               </div>
 
               {selectedSubject?.chapters && selectedSubject.chapters.length > 0 ? (
                 <div className="space-y-3">
                   {selectedSubject.chapters.map((chapter) => (
-                    <Card key={chapter.id} className="border-slate-800 bg-slate-950/60">
+                    <Card key={chapter.id} className="border-white/[0.08] bg-slate-950/60">
                       <CardHeader className="p-4 pb-2">
                         <CardTitle className="text-sm text-slate-200 font-semibold flex items-center justify-between">
                           <span>{chapter.title}</span>
                           <span className="text-[11px] font-normal text-slate-400">
-                            {chapter.topics.filter((t) => t.completed).length}/{chapter.topics.length} Done
+                            {chapter.topics.filter((t) => t.completed).length}/{chapter.topics.length} Completed
                           </span>
                         </CardTitle>
                       </CardHeader>
@@ -481,35 +580,43 @@ function CoursesContent() {
                         {chapter.topics.map((topic) => (
                           <div
                             key={topic.id}
-                            onClick={() => toggleTopic(topic.id)}
-                            className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/40 hover:bg-slate-900 border border-slate-800/40 hover:border-slate-700 cursor-pointer transition-all group"
+                            onClick={() => openStudyStudio(topic)}
+                            className="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 hover:bg-slate-900 border border-slate-800/40 hover:border-brand-500/40 cursor-pointer transition-all group"
                           >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {topic.completed ? (
-                                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                              ) : (
-                                <Circle className="w-4 h-4 text-slate-600 group-hover:text-slate-400 shrink-0" />
-                              )}
+                            <div className="flex items-center gap-3 min-w-0">
+                              <button
+                                onClick={(e) => toggleTopic(topic.id, e)}
+                                className="shrink-0 p-0.5"
+                                title={topic.completed ? "Mark incomplete" : "Mark completed"}
+                              >
+                                {topic.completed ? (
+                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                ) : (
+                                  <Circle className="w-4 h-4 text-slate-600 group-hover:text-slate-400" />
+                                )}
+                              </button>
                               <span
                                 className={`text-xs ${
                                   topic.completed
                                     ? "text-slate-400 line-through"
-                                    : "text-slate-200 group-hover:text-white"
+                                    : "text-slate-200 group-hover:text-white font-medium"
                                 } truncate`}
                               >
                                 {topic.title}
                               </span>
                             </div>
 
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                router.push(`/chat?prompt=${encodeURIComponent(`Explain ${topic.title} in detail`)}&courseId=${selectedCourse.id}`);
-                              }}
-                              className="text-[10px] text-brand-400 hover:text-brand-300 px-2 py-1 rounded bg-brand-500/10 border border-brand-500/20 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                            >
-                              Explain Topic
-                            </button>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openStudyStudio(topic);
+                                }}
+                                className="text-[10px] text-brand-400 hover:text-brand-300 px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20 transition-colors flex items-center gap-1"
+                              >
+                                <Brain className="w-3 h-3" /> Study Studio
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </CardContent>
@@ -530,6 +637,199 @@ function CoursesContent() {
           </div>
         )}
       </div>
+
+      {/* Topic Study Studio Modal */}
+      <Dialog open={studyStudioOpen} onOpenChange={setStudyStudioOpen}>
+        <DialogContent className="max-w-3xl bg-slate-950 border-white/[0.08] text-white max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <Badge variant="brand" className="text-[10px]">
+                TOPIC STUDY STUDIO
+              </Badge>
+              {topicBreakdown?.verifiedSource && (
+                <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-mono">
+                  <BookmarkCheck className="w-3.5 h-3.5" /> Cited from: {topicBreakdown.verifiedSource.fileName}
+                </span>
+              )}
+            </div>
+            <DialogTitle className="text-xl font-bold text-white mt-1">
+              {activeTopic?.title}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">
+              Interactive AI breakdown, exam marking schemes, and personal student scratchpad.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Studio Tab Switcher */}
+          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-900 border border-white/[0.06] text-xs mt-2">
+            <button
+              onClick={() => setActiveStudioTab("breakdown")}
+              className={`py-2 rounded-lg font-medium transition-all ${
+                activeStudioTab === "breakdown" ? "bg-brand-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              🧠 AI Breakdown & 5-Marker
+            </button>
+            <button
+              onClick={() => setActiveStudioTab("notes")}
+              className={`py-2 rounded-lg font-medium transition-all ${
+                activeStudioTab === "notes" ? "bg-brand-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              📝 My Scratchpad Notes
+            </button>
+            <button
+              onClick={() => setActiveStudioTab("quickcheck")}
+              className={`py-2 rounded-lg font-medium transition-all ${
+                activeStudioTab === "quickcheck" ? "bg-brand-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
+              }`}
+            >
+              ❓ Diagnostic Check
+            </button>
+          </div>
+
+          {loadingBreakdown ? (
+            <div className="py-12 flex flex-col items-center justify-center space-y-2">
+              <Loader2 className="w-6 h-6 animate-spin text-brand-400" />
+              <p className="text-xs text-slate-400">Generating structured topic breakdown from notes...</p>
+            </div>
+          ) : (
+            <div className="py-4 space-y-4">
+              {activeStudioTab === "breakdown" && topicBreakdown && (
+                <div className="space-y-4 animate-in fade-in-50">
+                  {/* Intuition Box */}
+                  <div className="p-4 rounded-2xl bg-slate-900/80 border border-white/[0.06] space-y-2">
+                    <h4 className="text-xs font-semibold text-brand-300 uppercase tracking-wider">
+                      Conceptual Intuition & Analogy
+                    </h4>
+                    <p className="text-xs text-slate-200 leading-relaxed">
+                      {topicBreakdown.intuition.summary}
+                    </p>
+                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-amber-300 italic">
+                      💡 {topicBreakdown.intuition.keyAnalogy}
+                    </div>
+                  </div>
+
+                  {/* Exam 5-Marker Blueprint */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-brand-950/40 border border-brand-500/30 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                        <Award className="w-4 h-4 text-brand-400" /> Exam 5/10-Mark Answer Blueprint
+                      </h4>
+                      <Badge variant="brand" className="text-[10px]">
+                        Marking Criteria
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                      {topicBreakdown.examBlueprint.markingScheme.map((item: any, idx: number) => (
+                        <div key={idx} className="p-2 rounded-lg bg-slate-950 border border-slate-800">
+                          <span className="font-bold text-brand-400 block">{item.marks}</span>
+                          <span className="text-slate-300 text-[10px]">{item.item}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-2">
+                      <MarkdownRenderer content={topicBreakdown.examBlueprint.idealAnswer} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeStudioTab === "notes" && (
+                <div className="space-y-3 animate-in fade-in-50">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>Write your personal summary, notes, or code snippets for this topic:</span>
+                    <Button
+                      size="sm"
+                      onClick={saveTopicNote}
+                      disabled={savingNote}
+                      className="h-8 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs gap-1"
+                    >
+                      {savingNote ? <Loader2 className="w-3 h-3 animate-spin" /> : <Edit3 className="w-3 h-3" />}
+                      Save Notes
+                    </Button>
+                  </div>
+                  <textarea
+                    rows={8}
+                    value={topicNoteContent}
+                    onChange={(e) => setTopicNoteContent(e.target.value)}
+                    placeholder="# My Notes on this Topic&#10;- Important theorem...&#10;- Example..."
+                    className="w-full p-4 rounded-2xl bg-slate-900 border border-white/[0.08] text-xs md:text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500 font-mono resize-none leading-relaxed"
+                  />
+                </div>
+              )}
+
+              {activeStudioTab === "quickcheck" && topicBreakdown && (
+                <div className="space-y-3 animate-in fade-in-50">
+                  <p className="text-xs text-slate-400">
+                    Test your instant comprehension with this diagnostic question:
+                  </p>
+                  {topicBreakdown.quickCheck.map((qc: any, qIdx: number) => (
+                    <div key={qIdx} className="p-4 rounded-2xl bg-slate-900 border border-white/[0.06] space-y-3">
+                      <h4 className="text-xs font-semibold text-white">{qc.question}</h4>
+                      <div className="space-y-2">
+                        {qc.options.map((opt: string, oIdx: number) => (
+                          <div
+                            key={oIdx}
+                            className={`p-2.5 rounded-xl border text-xs cursor-pointer ${
+                              opt === qc.correctAnswer
+                                ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 font-medium"
+                                : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-900"
+                            }`}
+                          >
+                            {opt}
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-slate-400 italic pt-1">
+                        💡 {qc.explanation}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Course Cheat Sheet Modal */}
+      <Dialog open={cheatSheetOpen} onOpenChange={setCheatSheetOpen}>
+        <DialogContent className="max-w-3xl bg-slate-950 border-white/[0.08] text-white max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-xl font-bold text-white flex items-center gap-2">
+                <FileText className="w-5 h-5 text-amber-400" /> Exam Revision Cheat Sheet
+              </DialogTitle>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={copyCheatSheet}
+                className="rounded-xl border-slate-800 text-xs gap-1.5"
+              >
+                {copiedCheatSheet ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedCheatSheet ? "Copied!" : "Copy Markdown"}
+              </Button>
+            </div>
+            <DialogDescription className="text-xs text-slate-400">
+              High-yield printable course overview and universal 5-mark answer formulas.
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingCheatSheet ? (
+            <div className="py-12 flex flex-col items-center justify-center space-y-2">
+              <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+              <p className="text-xs text-slate-400">Synthesizing course cheat sheet...</p>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-slate-900/90 border border-white/[0.06] text-xs leading-relaxed space-y-2">
+              <MarkdownRenderer content={cheatSheetContent} />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Add Course Modal */}
       <Dialog open={newCourseModalOpen} onOpenChange={setNewCourseModalOpen}>
@@ -585,7 +885,7 @@ function CoursesContent() {
                 value={courseDesc}
                 onChange={(e) => setCourseDesc(e.target.value)}
                 placeholder="Brief summary of syllabus or exam objectives..."
-                className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none"
               />
             </div>
 

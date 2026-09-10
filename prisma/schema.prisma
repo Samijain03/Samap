@@ -19,6 +19,9 @@ model User {
   conversations Conversation[]
   quizAttempts  QuizAttempt[]
   activities    ActivityLog[]
+  exams         Exam[]
+  flashcardDecks FlashcardDeck[]
+  topicNotes    TopicNote[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 }
@@ -223,8 +226,57 @@ model ActivityLog {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // chat, roadmap_progress, quiz_completed, course_added, file_uploaded
+  type      String   // chat, roadmap_progress, quiz_completed, course_added, file_uploaded, exam_planned, flashcard_mastered
   title     String
   details   String?
   createdAt DateTime @default(now())
+}
+
+model Exam {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId        String?
+  title           String
+  examDate        DateTime
+  targetScore     String?  // e.g. "95% / Grade A+"
+  syllabusSummary String?
+  studyPlan       String?  // JSON stringified daily revision roadmap & tasks
+  status          String   @default("upcoming") // upcoming, completed
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model FlashcardDeck {
+  id        String      @id @default(cuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId  String?
+  title     String
+  topic     String
+  cards     Flashcard[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
+
+model Flashcard {
+  id         String        @id @default(cuid())
+  deckId     String
+  deck       FlashcardDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  front      String
+  back       String
+  level      Int           @default(0) // 0: new, 1: learning, 2: review, 3: mastered
+  nextReview DateTime      @default(now())
+  createdAt  DateTime      @default(now())
+}
+
+model TopicNote {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topicId   String
+  content   String
+  summary   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
