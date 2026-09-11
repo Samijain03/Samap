@@ -21,11 +21,26 @@ import {
   Square,
   Menu,
   X,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  BookmarkPlus,
+  Download,
+  Share2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownRenderer } from "@/components/chat/MarkdownRenderer";
 import { SourceCitations } from "@/components/chat/SourceCitations";
 import { StudyActionChips } from "@/components/chat/StudyActionChips";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { ChatMessage, ConversationItem, CourseItem, SourceCitation } from "@/lib/types";
 
 function ChatContent() {
@@ -38,18 +53,32 @@ function ChatContent() {
   const [inputPrompt, setInputPrompt] = useState(initialPrompt || "");
   const [selectedAction, setSelectedAction] = useState<string | null>(initialAction || "explain");
   const [selectedCourseId, setSelectedCourseId] = useState<string>(initialCourseId || "");
-  
+
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [courses, setCourses] = useState<CourseItem[]>([]);
-  
+
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [streamingSources, setStreamingSources] = useState<SourceCitation[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  
+
+  // Voice Speech-to-Text state
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  // Text-to-Speech Audio Read-Aloud state
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+
+  // Flashcard Modal state
+  const [flashcardModalOpen, setFlashcardModalOpen] = useState(false);
+  const [flashcardFront, setFlashcardFront] = useState("");
+  const [flashcardBack, setFlashcardBack] = useState("");
+  const [savingCard, setSavingCard] = useState(false);
+  const [cardSavedSuccess, setCardSavedSuccess] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -99,9 +128,22 @@ function ChatContent() {
     }
   }, [inputPrompt]);
 
+  // Clean up speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
   const selectConversation = async (convId: string) => {
     setActiveConversationId(convId);
     setMobileSidebarOpen(false);
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+    }
     try {
       const res = await fetch(`/api/chat/conversations/${convId}`);
       const data = await res.json();
@@ -124,6 +166,10 @@ function ChatContent() {
     setMessages([]);
     setInputPrompt("");
     setMobileSidebarOpen(false);
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+    }
     inputRef.current?.focus();
   };
 
@@ -156,6 +202,169 @@ function ChatContent() {
     navigator.clipboard.writeText(content);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  // Voice Dictation (Speech-to-Text)
+  const toggleVoiceInput = () => {
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setIsListening(true);
+      };
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        setInputPrompt((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.error("Failed to start speech recognition:", err);
+      setIsListening(false);
+    }
+  };
+
+  // Audio Read-Aloud (Text-to-Speech)
+  const toggleReadAloud = (text: string, messageId: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      alert("Text-to-speech is not supported on this browser.");
+      return;
+    }
+
+    if (speakingMessageId === messageId) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    // Clean markdown formatting for clean audio reading
+    const cleanText = text
+      .replace(/#+\s/g, "")
+      .replace(/\*\*/g, "")
+      .replace(/\*/g, "")
+      .replace(/`{1,3}[^`]*`{1,3}/g, "code block omitted")
+      .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1")
+      .replace(/\$\$?[^\$]+\$\$?/g, "equation");
+
+    const utterance = new SpeechSynthesisUtterance(cleanText);
+    utterance.rate = 1.0;
+    utterance.pitch = 1.0;
+
+    utterance.onend = () => {
+      setSpeakingMessageId(null);
+    };
+
+    utterance.onerror = () => {
+      setSpeakingMessageId(null);
+    };
+
+    setSpeakingMessageId(messageId);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // Open Save as Flashcard modal
+  const handleOpenFlashcardModal = (userPromptText: string, aiAnswerText: string) => {
+    setFlashcardFront(userPromptText || "Key Concept");
+    // Extract first 2-3 sentences or definition
+    const lines = aiAnswerText.split("\n").filter((l) => l.trim() && !l.startsWith("#"));
+    const conciseAnswer = lines.slice(0, 3).join("\n").replace(/\*\*/g, "");
+    setFlashcardBack(conciseAnswer || aiAnswerText.substring(0, 200));
+    setCardSavedSuccess(false);
+    setFlashcardModalOpen(true);
+  };
+
+  const handleSaveFlashcard = async () => {
+    if (!flashcardFront.trim() || !flashcardBack.trim()) return;
+    try {
+      setSavingCard(true);
+      const res = await fetch("/api/flashcards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          front: flashcardFront,
+          back: flashcardBack,
+          courseId: selectedCourseId || undefined,
+          topicTitle: flashcardFront.substring(0, 30),
+        }),
+      });
+      if (res.ok) {
+        setCardSavedSuccess(true);
+        setTimeout(() => {
+          setFlashcardModalOpen(false);
+          setCardSavedSuccess(false);
+        }, 1200);
+      }
+    } catch (err) {
+      console.error("Failed to save flashcard:", err);
+    } finally {
+      setSavingCard(false);
+    }
+  };
+
+  // Export session as Markdown study notes
+  const handleExportMarkdownNotes = () => {
+    if (messages.length === 0) return;
+    const title = conversations.find((c) => c.id === activeConversationId)?.title || "Study Session Notes";
+    let md = `# ${title}\n\n*Generated with Samap AI Study Companion — ${new Date().toLocaleDateString()}*\n\n---\n\n`;
+
+    messages.forEach((msg, idx) => {
+      if (msg.role === "user") {
+        md += `## ❓ Question ${Math.floor(idx / 2) + 1}: ${msg.content}\n\n`;
+      } else {
+        md += `### 💡 AI Explanation\n\n${msg.content}\n\n`;
+        if (msg.sources && msg.sources.length > 0) {
+          md += `**Sources Consulted:**\n`;
+          msg.sources.forEach((s) => {
+            md += `- *${s.fileName}*${s.pageNumber ? ` (Page ${s.pageNumber})` : ""}\n`;
+          });
+          md += `\n`;
+        }
+        md += `---\n\n`;
+      }
+    });
+
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.toLowerCase().replace(/[^a-z0-9]/g, "-")}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const sendMessage = async (
@@ -367,22 +576,44 @@ function ChatContent() {
 
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
-        {/* Mobile Header Bar with Session Toggle */}
-        <div className="lg:hidden px-4 py-2.5 border-b border-white/[0.08] bg-slate-950/60 flex items-center justify-between">
-          <button
-            onClick={() => setMobileSidebarOpen(true)}
-            className="flex items-center gap-2 text-xs font-semibold text-slate-300 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800"
-          >
-            <Menu className="w-3.5 h-3.5" />
-            <span>Study Sessions</span>
-          </button>
-          <Button
-            size="sm"
-            onClick={startNewConversation}
-            className="h-8 text-xs bg-brand-600 hover:bg-brand-500 text-white rounded-xl"
-          >
-            <Plus className="w-3.5 h-3.5 mr-1" /> New
-          </Button>
+        {/* Top Header Bar with Session Controls & Export */}
+        <div className="px-4 py-2.5 border-b border-white/[0.08] bg-slate-950/60 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="lg:hidden flex items-center gap-2 text-xs font-semibold text-slate-300 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800"
+            >
+              <Menu className="w-3.5 h-3.5" />
+              <span>Sessions</span>
+            </button>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-xs font-medium text-slate-300">
+                {conversations.find((c) => c.id === activeConversationId)?.title || "Active Study Workspace"}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {messages.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleExportMarkdownNotes}
+                className="h-8 text-xs border-slate-800 bg-slate-900/80 text-slate-300 hover:text-white rounded-xl gap-1.5"
+                title="Export session as Markdown notes"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Export Notes</span>
+              </Button>
+            )}
+            <Button
+              size="sm"
+              onClick={startNewConversation}
+              className="h-8 text-xs bg-brand-600 hover:bg-brand-500 text-white rounded-xl"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" /> New
+            </Button>
+          </div>
         </div>
 
         {/* Messages Stream Container */}
@@ -397,7 +628,7 @@ function ChatContent() {
                   Samap AI Study Companion
                 </h2>
                 <p className="text-xs md:text-sm text-slate-400">
-                  Ask conceptual questions, prepare for exams with 5-mark answers, or explore your uploaded course notes with verified citations.
+                  Ask conceptual questions, speak aloud with voice input, prepare for exams with 5-mark answers, or explore your uploaded course notes.
                 </p>
               </div>
 
@@ -480,11 +711,50 @@ function ChatContent() {
                     <MarkdownRenderer content={msg.content} />
                     {msg.sources && <SourceCitations sources={msg.sources} />}
 
-                    {/* Copy message button */}
-                    <div className="pt-2 flex items-center justify-end">
+                    {/* Action Toolbar on AI message */}
+                    <div className="pt-3 mt-2 border-t border-slate-800/80 flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5">
+                        {/* Audio Read-Aloud */}
+                        <button
+                          onClick={() => toggleReadAloud(msg.content, msg.id)}
+                          className={`text-[11px] px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1 ${
+                            speakingMessageId === msg.id
+                              ? "bg-amber-500/20 border-amber-500/40 text-amber-300 animate-pulse"
+                              : "bg-slate-950/60 border-slate-800 text-slate-400 hover:text-white"
+                          }`}
+                          title="Listen to explanation"
+                        >
+                          {speakingMessageId === msg.id ? (
+                            <>
+                              <VolumeX className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Stop</span>
+                            </>
+                          ) : (
+                            <>
+                              <Volume2 className="w-3.5 h-3.5" />
+                              <span>Listen</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Save as Flashcard */}
+                        <button
+                          onClick={() => {
+                            const prevUserMsg = messages[i - 1]?.content || "Key Concept";
+                            handleOpenFlashcardModal(prevUserMsg, msg.content);
+                          }}
+                          className="text-[11px] bg-slate-950/60 border border-slate-800 text-slate-400 hover:text-brand-300 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1"
+                          title="Save as Active Recall Flashcard"
+                        >
+                          <BookmarkPlus className="w-3.5 h-3.5" />
+                          <span>Flashcard</span>
+                        </button>
+                      </div>
+
+                      {/* Copy Button */}
                       <button
                         onClick={() => handleCopy(msg.content, msg.id)}
-                        className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-800"
+                        className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800 transition-all"
                         title="Copy markdown text"
                       >
                         {copiedId === msg.id ? (
@@ -548,7 +818,7 @@ function ChatContent() {
               onSelectAction={setSelectedAction}
             />
 
-            {/* Input Form */}
+            {/* Input Form with Voice Dictation */}
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -562,10 +832,37 @@ function ChatContent() {
                 value={inputPrompt}
                 onChange={(e) => setInputPrompt(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask a course question, request an exam answer, or quiz me..."
-                className="w-full resize-none py-3.5 pl-4 pr-16 rounded-2xl bg-slate-900/90 border border-white/[0.08] text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/50 focus:border-brand-500 transition-all leading-normal"
+                placeholder={
+                  isListening
+                    ? "Listening... Speak your question aloud..."
+                    : "Ask a course question, speak with mic, or request an exam answer..."
+                }
+                className={`w-full resize-none py-3.5 pl-4 pr-24 rounded-2xl bg-slate-900/90 border text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 transition-all leading-normal ${
+                  isListening
+                    ? "border-rose-500/80 ring-2 ring-rose-500/30"
+                    : "border-white/[0.08] focus:ring-brand-500/50 focus:border-brand-500"
+                }`}
               />
+
               <div className="absolute right-2.5 bottom-2.5 flex items-center gap-1.5">
+                {/* Voice Dictation Button */}
+                <button
+                  type="button"
+                  onClick={toggleVoiceInput}
+                  className={`h-9 w-9 rounded-xl flex items-center justify-center transition-all ${
+                    isListening
+                      ? "bg-rose-600 text-white animate-pulse ring-2 ring-rose-400 shadow-lg shadow-rose-600/40"
+                      : "bg-slate-800/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60"
+                  }`}
+                  title={isListening ? "Stop listening" : "Speak question (Voice Dictation)"}
+                >
+                  {isListening ? (
+                    <MicOff className="w-4 h-4 text-white" />
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
+                </button>
+
                 {isStreaming ? (
                   <Button
                     type="button"
@@ -591,6 +888,78 @@ function ChatContent() {
           </div>
         </div>
       </div>
+
+      {/* Save as Flashcard Modal */}
+      <Dialog open={flashcardModalOpen} onOpenChange={setFlashcardModalOpen}>
+        <DialogContent className="max-w-md bg-slate-950 border border-slate-800 p-6 rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+              <BookmarkPlus className="w-5 h-5 text-brand-400" />
+              Save to Active Recall Deck
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">
+              Transform this AI explanation into a Leitner spaced repetition flashcard.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Front (Prompt / Question)</label>
+              <input
+                type="text"
+                value={flashcardFront}
+                onChange={(e) => setFlashcardFront(e.target.value)}
+                placeholder="What is the concept or question?"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Back (Answer / Core Key)</label>
+              <textarea
+                rows={4}
+                value={flashcardBack}
+                onChange={(e) => setFlashcardBack(e.target.value)}
+                placeholder="Core definition, key equations, or bullet points..."
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none"
+              />
+            </div>
+
+            {cardSavedSuccess && (
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
+                <Check className="w-4 h-4" />
+                <span>Card successfully saved to your Spaced Repetition deck!</span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFlashcardModalOpen(false)}
+              className="border-slate-800 text-slate-400 hover:text-white rounded-xl text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveFlashcard}
+              disabled={savingCard || cardSavedSuccess || !flashcardFront.trim() || !flashcardBack.trim()}
+              className="bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-semibold"
+            >
+              {savingCard ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  Saving...
+                </>
+              ) : (
+                "Save Card"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

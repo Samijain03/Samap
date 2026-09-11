@@ -277,3 +277,188 @@ export function generateMockQuiz(topic: string, count: number = 5): Partial<Quiz
     ],
   };
 }
+
+export function generateMockSyllabus(courseTitle: string, description?: string): any {
+  const cleanTitle = courseTitle.trim();
+  return {
+    title: cleanTitle,
+    code: cleanTitle.substring(0, 3).toUpperCase() + '-301',
+    description: description || `Comprehensive academic curriculum for ${cleanTitle} covering foundational principles, core implementation patterns, and advanced exam-ready topics.`,
+    subjects: [
+      {
+        title: `Unit 1: Foundations & Core Principles of ${cleanTitle}`,
+        description: 'Fundamental definitions, mathematical prerequisites, and essential theoretical models.',
+        chapters: [
+          {
+            title: '1. Introduction & Basic Architecture',
+            topics: [
+              { title: 'Core Terminology & Mathematical Preliminaries', description: 'Essential vocabulary, notation, and baseline theorems.', estimatedMinutes: 45, examRelevance: 'Essential' },
+              { title: 'Architectural Abstractions & System Design', description: 'System layers, components, and module interactions.', estimatedMinutes: 60, examRelevance: 'High' },
+              { title: 'State Transitions & Formal Workflows', description: 'Step-by-step state representations and runtime analysis.', estimatedMinutes: 40, examRelevance: 'Medium' },
+            ],
+          },
+          {
+            title: '2. Foundational Algorithms & Mechanics',
+            topics: [
+              { title: 'Fundamental Operations & Time Complexity', description: 'Big-O bounds, space tradeoffs, and best/worst-case limits.', estimatedMinutes: 50, examRelevance: 'Essential' },
+              { title: 'Standard Data Representations', description: 'Memory layout, encapsulation, and access patterns.', estimatedMinutes: 45, examRelevance: 'High' },
+            ],
+          },
+        ],
+      },
+      {
+        title: `Unit 2: Deep Dive, Techniques & Optimization`,
+        description: 'Advanced methodologies, core algorithms, edge-case handling, and performance tuning.',
+        chapters: [
+          {
+            title: '3. Core Algorithmic Techniques & Proofs',
+            topics: [
+              { title: 'Primary Processing Strategies', description: 'Algorithmic paradigms, divide-and-conquer, and recursion schemes.', estimatedMinutes: 60, examRelevance: 'Essential' },
+              { title: 'Concurrency, Synchronization & Race Prevention', description: 'Thread safety, critical sections, and invariant enforcement.', estimatedMinutes: 75, examRelevance: 'High' },
+            ],
+          },
+          {
+            title: '4. Optimization & Production Engineering',
+            topics: [
+              { title: 'Latency Reduction & Memory Profiling', description: 'Cache optimization, memory pooling, and garbage mitigation.', estimatedMinutes: 55, examRelevance: 'High' },
+              { title: 'Error Recovery & Fault Tolerance Models', description: 'Failover mechanisms, rollback semantics, and reliability.', estimatedMinutes: 45, examRelevance: 'Medium' },
+            ],
+          },
+        ],
+      },
+      {
+        title: `Unit 3: Case Studies & High-Yield Exam Masterclasses`,
+        description: 'Comprehensive 10-marker design questions, real-world case analysis, and synthesis.',
+        chapters: [
+          {
+            title: '5. End-to-End System Synthesis',
+            topics: [
+              { title: 'Real-World System Case Study Analysis', description: 'Analysis of production architectures and design tradeoffs.', estimatedMinutes: 90, examRelevance: 'High' },
+              { title: 'University Exam 10-Marker Synthesis Blueprint', description: 'Structured answers, standard diagrams, and scoring rubrics.', estimatedMinutes: 60, examRelevance: 'Essential' },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function generateMockExamPaper(courseTitle: string, courseCode?: string): any {
+  return {
+    title: `University Semester Final Examination: ${courseTitle}`,
+    courseTitle,
+    courseCode: courseCode || 'ENG-401',
+    durationMinutes: 180,
+    totalMarks: 100,
+    instructions: [
+      'Answer all questions in Section A (2 marks each).',
+      'Answer any 4 questions from Section B (5 marks each).',
+      'Answer any 3 questions from Section C (10 marks each).',
+      'Neat diagrams, formulas, and state tables carry designated marks.',
+    ],
+    sections: [
+      {
+        sectionName: 'Section A: Conceptual Definitions & Short Questions',
+        description: 'Answer all questions. Concise 2-3 sentence explanations.',
+        markPerQuestion: 2,
+        questions: [
+          {
+            id: 'q-a1',
+            questionNumber: 1,
+            question: `State the formal definition and fundamental principle of ${courseTitle}.`,
+            topicsCovered: 'Foundations & Terminology',
+            modelAnswer: `Define the primary concept clearly: It represents the structured method/framework for solving the domain challenge with verified asymptotic bounds and deterministic execution.`,
+            markingRubric: ['1 mark for exact definition', '1 mark for mathematical/formal notation'],
+          },
+          {
+            id: 'q-a2',
+            questionNumber: 2,
+            question: `Explain why edge-case boundary verification is critical in ${courseTitle}.`,
+            topicsCovered: 'Fault Tolerance & Reliability',
+            modelAnswer: `Boundary conditions (e.g., empty sets, null pointers, overflow indices) frequently violate core invariants if not explicitly gated, leading to state corruption or security vulnerabilities.`,
+            markingRubric: ['1 mark for identifying the failure mode', '1 mark for prevention strategy'],
+          },
+          {
+            id: 'q-a3',
+            questionNumber: 3,
+            question: `Differentiate between static and dynamic allocation strategies in this domain.`,
+            topicsCovered: 'Memory & Resource Management',
+            modelAnswer: `Static allocation occurs at compile time with deterministic overhead and fixed size, whereas dynamic allocation occurs at runtime on the heap, offering elasticity at the cost of management overhead.`,
+            markingRubric: ['1 mark for compile vs runtime distinction', '1 mark for trade-off statement'],
+          },
+        ],
+      },
+      {
+        sectionName: 'Section B: Analytical & 5-Mark Questions',
+        description: 'Provide structured, point-by-point explanations with formulas or architecture snippets.',
+        markPerQuestion: 5,
+        questions: [
+          {
+            id: 'q-b1',
+            questionNumber: 4,
+            question: `Describe the end-to-end working mechanism of the primary algorithm in ${courseTitle}. Include step-by-step phases.`,
+            topicsCovered: 'Core Algorithms',
+            modelAnswer: `1. Initialization: Setup base invariants and allocation.\n2. Iterative processing: Apply transformation logic per round.\n3. Convergence condition: Check termination criteria.\n4. Result finalization: Cleanup resources and return verified output.`,
+            markingRubric: ['1 mark for initialization', '2 marks for processing loop', '1 mark for termination', '1 mark for complexity analysis'],
+          },
+          {
+            id: 'q-b2',
+            questionNumber: 5,
+            question: `Compare the time and space complexity trade-offs between linear vs logarithmic approaches for ${courseTitle}.`,
+            topicsCovered: 'Complexity Analysis',
+            modelAnswer: `Tabulate time complexity: Linear $O(N)$ vs Logarithmic $O(\\log N)$. Discuss auxiliary space requirements: log-time approaches frequently require pre-sorted inputs ($O(N \\log N)$ preprocessing) or tree overhead.`,
+            markingRubric: ['2 marks for complexity formulas', '2 marks for tabular comparison', '1 mark for practical scenario when each is preferred'],
+          },
+        ],
+      },
+      {
+        sectionName: 'Section C: Comprehensive 10-Mark Design & Case Study Questions',
+        description: 'Full architectural designs, complete mathematical derivations, and implementation blueprints.',
+        markPerQuestion: 10,
+        questions: [
+          {
+            id: 'q-c1',
+            questionNumber: 6,
+            question: `Design an enterprise-scale architecture implementing ${courseTitle}. Detail the data flow, component breakdown, failure recovery, and asymptotic performance bounds.`,
+            topicsCovered: 'System Design & Comprehensive Synthesis',
+            modelAnswer: `Detailed 4-part architectural blueprint:\n- Layer 1: Ingestion & Validation Gateway\n- Layer 2: Core Processing & Algorithmic Pipeline\n- Layer 3: Caching & Persistence Engine\n- Layer 4: Monitoring, Rollback & Telemetry\nInclude ASCII/diagram layout, latency calculations, and concurrency locking strategies.`,
+            markingRubric: ['3 marks for architecture diagram & component decomposition', '3 marks for data flow and state machine', '2 marks for failure handling & edge cases', '2 marks for time/space complexity derivation'],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+export function generateMockRoadmapChallenge(nodeTitle: string): any {
+  return {
+    title: `Practical Engineering Challenge: ${nodeTitle}`,
+    difficulty: 'Intermediate',
+    estimatedMinutes: 30,
+    problemStatement: `Implement a robust, production-grade module demonstrating mastery of "${nodeTitle}". Your solution must handle edge cases (null inputs, empty sequences, concurrency) and achieve optimal time complexity.`,
+    requirements: [
+      'Write clean, modular code with descriptive variable naming',
+      'Validate all input parameters with explicit guards',
+      'Optimize for minimal memory allocations and O(N) or better runtime',
+      'Include inline comments explaining critical non-obvious steps',
+    ],
+    starterCode: `// Challenge Starter Code: ${nodeTitle}
+function solveChallenge(inputData) {
+  // 1. Validate inputs
+  if (!inputData) throw new Error("Invalid input");
+  
+  // TODO: Implement your core logic here
+  
+  return { success: true, result: null };
+}
+
+// Example test case:
+console.log(solveChallenge("sample_test"));`,
+    hints: [
+      'Consider using a two-pointer approach or hash map to reduce time complexity.',
+      'Check what happens when the input size is 0 or 1 before entering the main loop.',
+    ],
+    solutionExplanation: `The optimal approach leverages direct indexed lookups and memoized intermediate computations, reducing polynomial time to linear time while preserving deterministic memory behavior.`,
+  };
+}
+

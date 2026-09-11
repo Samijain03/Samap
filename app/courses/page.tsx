@@ -26,6 +26,15 @@ import {
   Check,
   Brain,
   HelpCircle,
+  GraduationCap,
+  Clock,
+  Download,
+  Eye,
+  EyeOff,
+  Play,
+  Pause,
+  RotateCcw,
+  Wand2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -61,6 +70,24 @@ function CoursesContent() {
   const [initialSubjectName, setInitialSubjectName] = useState("");
   const [creatingCourse, setCreatingCourse] = useState(false);
 
+  // AI Auto-Generate Syllabus Modal State
+  const [aiSyllabusModalOpen, setAiSyllabusModalOpen] = useState(false);
+  const [syllabusPrompt, setSyllabusPrompt] = useState("");
+  const [generatingSyllabus, setGeneratingSyllabus] = useState(false);
+  const [generatedSyllabusPreview, setGeneratedSyllabusPreview] = useState<any>(null);
+
+  // AI Mock Exam Simulator State
+  const [mockExamModalOpen, setMockExamModalOpen] = useState(false);
+  const [generatingMockExam, setGeneratingMockExam] = useState(false);
+  const [mockExamPaper, setMockExamPaper] = useState<any>(null);
+  const [examDurationMins, setExamDurationMins] = useState(180);
+  const [examTotalMarks, setExamTotalMarks] = useState(100);
+  const [examSecondsLeft, setExamSecondsLeft] = useState(180 * 60);
+  const [isExamTimerActive, setIsExamTimerActive] = useState(false);
+  const [studentAnswers, setStudentAnswers] = useState<Record<string, string>>({});
+  const [showModelSolutions, setShowModelSolutions] = useState(false);
+  const [copiedExamMd, setCopiedExamMd] = useState(false);
+
   // Upload Modal State
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -85,6 +112,17 @@ function CoursesContent() {
   useEffect(() => {
     fetchCourses();
   }, []);
+
+  // Exam Countdown Timer
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isExamTimerActive && examSecondsLeft > 0) {
+      interval = setInterval(() => {
+        setExamSecondsLeft((prev) => Math.max(0, prev - 1));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isExamTimerActive, examSecondsLeft]);
 
   async function fetchCourses() {
     try {
@@ -146,6 +184,68 @@ function CoursesContent() {
     }
   };
 
+  // AI Auto-Generate Syllabus & Apply
+  const handleGenerateSyllabus = async () => {
+    if (!syllabusPrompt.trim()) return;
+    try {
+      setGeneratingSyllabus(true);
+      const res = await fetch("/api/courses/generate-syllabus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseTitle: syllabusPrompt,
+          courseId: selectedCourse?.id,
+          saveToCourse: true,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGeneratedSyllabusPreview(data.syllabus);
+        await fetchCourses();
+        setTimeout(() => {
+          setAiSyllabusModalOpen(false);
+          setGeneratedSyllabusPreview(null);
+          setSyllabusPrompt("");
+        }, 1200);
+      }
+    } catch (err) {
+      console.error("Failed to generate syllabus:", err);
+    } finally {
+      setGeneratingSyllabus(false);
+    }
+  };
+
+  // AI Mock Exam Generator
+  const handleOpenMockExam = async () => {
+    if (!selectedCourse) return;
+    setMockExamModalOpen(true);
+    setGeneratingMockExam(true);
+    setShowModelSolutions(false);
+    setStudentAnswers({});
+    setExamSecondsLeft(examDurationMins * 60);
+    setIsExamTimerActive(false);
+
+    try {
+      const res = await fetch(`/api/courses/${selectedCourse.id}/mock-exam`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          durationMinutes: examDurationMins,
+          totalMarks: examTotalMarks,
+        }),
+      });
+      const data = await res.json();
+      if (data.examPaper) {
+        setMockExamPaper(data.examPaper);
+        setIsExamTimerActive(true);
+      }
+    } catch (err) {
+      console.error("Failed to generate mock exam:", err);
+    } finally {
+      setGeneratingMockExam(false);
+    }
+  };
+
   const handleFileUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !selectedCourse) return;
@@ -181,60 +281,39 @@ function CoursesContent() {
     }
   };
 
-  const deleteDocument = async (docId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const handleDeleteDocument = async (docId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to remove this document?")) return;
     try {
       await fetch(`/api/documents/${docId}`, { method: "DELETE" });
       fetchCourses();
     } catch (err) {
-      console.error("Failed to delete document:", err);
+      console.error("Error deleting document:", err);
     }
   };
 
-  const toggleTopic = async (topicId: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  const toggleTopicCompletion = async (topicId: string, currentStatus: boolean, e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       const res = await fetch(`/api/topics/${topicId}/toggle`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ completed: !currentStatus }),
       });
       const data = await res.json();
-      if (data.topic) {
-        setCourses((prevCourses) =>
-          prevCourses.map((c) => ({
-            ...c,
-            subjects: c.subjects.map((s) => ({
-              ...s,
-              chapters: s.chapters.map((ch) => ({
-                ...ch,
-                topics: ch.topics.map((t) =>
-                  t.id === topicId ? { ...t, completed: data.topic.completed } : t
-                ),
-              })),
-            })),
-          }))
-        );
-
-        if (selectedCourse) {
-          setSelectedCourse((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  subjects: prev.subjects.map((s) => ({
-                    ...s,
-                    chapters: s.chapters.map((ch) => ({
-                      ...ch,
-                      topics: ch.topics.map((t) =>
-                        t.id === topicId ? { ...t, completed: data.topic.completed } : t
-                      ),
-                    })),
-                  })),
-                }
-              : null
-          );
-        }
+      if (data.topic && selectedCourse) {
+        const updatedSubjects = selectedCourse.subjects.map((sub) => ({
+          ...sub,
+          chapters: sub.chapters.map((ch) => ({
+            ...ch,
+            topics: ch.topics.map((t) => (t.id === topicId ? { ...t, completed: !currentStatus } : t)),
+          })),
+        }));
+        setSelectedCourse({ ...selectedCourse, subjects: updatedSubjects });
+        setCourses(courses.map((c) => (c.id === selectedCourse.id ? { ...c, subjects: updatedSubjects } : c)));
       }
     } catch (err) {
-      console.error("Toggle topic failed:", err);
+      console.error("Error toggling topic completion:", err);
     }
   };
 
@@ -246,7 +325,7 @@ function CoursesContent() {
 
     try {
       const [breakdownRes, noteRes] = await Promise.all([
-        fetch(`/api/topics/${topic.id}/breakdown`, { method: "POST" }),
+        fetch(`/api/topics/${topic.id}/breakdown`),
         fetch(`/api/topics/${topic.id}/notes`),
       ]);
 
@@ -300,6 +379,16 @@ function CoursesContent() {
     setTimeout(() => setCopiedCheatSheet(false), 2000);
   };
 
+  const formatTime = (secs: number) => {
+    const hrs = Math.floor(secs / 3600);
+    const mins = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    if (hrs > 0) {
+      return `${hrs}:${mins < 10 ? "0" : ""}${mins}:${s < 10 ? "0" : ""}${s}`;
+    }
+    return `${mins}:${s < 10 ? "0" : ""}${s}`;
+  };
+
   const getCourseCompletion = (course: CourseItem) => {
     const allTopics = course.subjects?.flatMap((s) => s.chapters?.flatMap((c) => c.topics) || []) || [];
     if (allTopics.length === 0) return 0;
@@ -326,11 +415,20 @@ function CoursesContent() {
             <h1 className="text-2xl font-bold tracking-tight text-white">My Courses & Syllabus</h1>
           </div>
           <p className="text-sm text-slate-400 mt-1">
-            Organize subjects, upload lecture notes/PDFs, and master topics with interactive studio breakdowns.
+            Organize subjects, upload lecture notes/PDFs, generate full syllabi, and simulate university mock exams.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            onClick={() => setAiSyllabusModalOpen(true)}
+            variant="outline"
+            className="rounded-xl border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 text-xs md:text-sm font-medium gap-1.5"
+          >
+            <Wand2 className="w-4 h-4 text-purple-400" />
+            AI Syllabus Builder
+          </Button>
+
           <Button
             onClick={() => setUploadModalOpen(true)}
             variant="outline"
@@ -435,13 +533,24 @@ function CoursesContent() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     size="sm"
+                    onClick={handleOpenMockExam}
+                    variant="outline"
+                    className="border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 rounded-xl text-xs gap-1.5"
+                  >
+                    <GraduationCap className="w-3.5 h-3.5 text-rose-400" />
+                    Mock Exam Paper
+                  </Button>
+
+                  <Button
+                    size="sm"
                     onClick={openCheatSheet}
                     variant="outline"
                     className="border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-xl text-xs gap-1.5"
                   >
                     <FileText className="w-3.5 h-3.5 text-amber-400" />
-                    Exam Cheat Sheet
+                    Cheat Sheet
                   </Button>
+
                   <Button
                     size="sm"
                     onClick={() => router.push(`/chat?courseId=${selectedCourse.id}`)}
@@ -449,15 +558,6 @@ function CoursesContent() {
                   >
                     <Sparkles className="w-3.5 h-3.5" />
                     Ask Course AI
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push(`/quizzes?topic=${encodeURIComponent(selectedCourse.title)}`)}
-                    className="border-slate-700 bg-slate-900/60 hover:bg-slate-800 rounded-xl text-xs gap-1.5 text-slate-200"
-                  >
-                    <Award className="w-3.5 h-3.5 text-purple-400" />
-                    Quiz Me
                   </Button>
                 </div>
               </div>
@@ -502,300 +602,499 @@ function CoursesContent() {
                   {selectedCourse.documents.map((doc) => (
                     <div
                       key={doc.id}
-                      className="p-3.5 rounded-2xl border border-slate-800/80 bg-slate-950/60 flex items-start justify-between gap-3 group"
+                      className="p-3.5 rounded-2xl bg-slate-950/70 border border-slate-800 flex items-center justify-between group hover:border-slate-700 transition-colors"
                     >
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-brand-400 shrink-0">
-                          <FileCode className="w-4 h-4" />
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                          <FileCode className="w-4 h-4 text-emerald-400" />
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-semibold text-slate-200 truncate group-hover:text-brand-300 transition-colors">
+                          <p className="text-xs font-medium text-white truncate">
                             {doc.fileName}
                           </p>
-                          <p className="text-[11px] text-slate-500">
-                            {doc.pageCount} Pages • {formatBytes(doc.fileSize)} • Ready for RAG
+                          <p className="text-[10px] text-slate-500">
+                            {formatBytes(doc.fileSize)} • Indexed for Q&A
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <Badge variant="emerald" className="text-[10px] font-mono">
-                          Indexed
-                        </Badge>
-                        <button
-                          onClick={(e) => deleteDocument(doc.id, e)}
-                          className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Delete document from RAG index"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+
+                      <button
+                        onClick={(e) => handleDeleteDocument(doc.id, e)}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                        title="Delete document"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="p-6 text-center rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 space-y-2">
-                  <FileUp className="w-8 h-8 text-slate-600 mx-auto" />
-                  <p className="text-xs text-slate-400">
-                    No documents uploaded yet for this course. Upload syllabus or lecture notes to enable AI RAG!
+                <div
+                  onClick={() => setUploadModalOpen(true)}
+                  className="p-6 rounded-2xl border-2 border-dashed border-slate-800 hover:border-slate-700 bg-slate-950/30 text-center cursor-pointer transition-all"
+                >
+                  <Upload className="w-6 h-6 text-slate-500 mx-auto mb-1.5" />
+                  <p className="text-xs font-medium text-slate-300">
+                    No lecture notes or syllabus PDFs uploaded yet
                   </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setUploadModalOpen(true)}
-                    className="text-xs rounded-xl border-slate-700 bg-slate-900/60"
-                  >
-                    Upload Document
-                  </Button>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Click to upload PDFs to ground AI answers in your exact university lecture slides.
+                  </p>
                 </div>
               )}
             </div>
 
-            {/* Chapters & Topics Syllabus Tree */}
+            {/* Chapters and Topics Syllabus Tree */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-brand-400" />
                   <h3 className="text-sm font-semibold text-white">
-                    Syllabus Breakdown: {selectedSubject?.title || "Chapters"}
+                    {selectedSubject ? selectedSubject.title : "Course Syllabus Breakdown"}
                   </h3>
                 </div>
-                <span className="text-xs text-slate-400">
-                  Click any topic to open Study Studio
-                </span>
               </div>
 
               {selectedSubject?.chapters && selectedSubject.chapters.length > 0 ? (
                 <div className="space-y-3">
-                  {selectedSubject.chapters.map((chapter) => (
-                    <Card key={chapter.id} className="border-white/[0.08] bg-slate-950/60">
-                      <CardHeader className="p-4 pb-2">
-                        <CardTitle className="text-sm text-slate-200 font-semibold flex items-center justify-between">
-                          <span>{chapter.title}</span>
-                          <span className="text-[11px] font-normal text-slate-400">
-                            {chapter.topics.filter((t) => t.completed).length}/{chapter.topics.length} Completed
+                  {selectedSubject.chapters.map((chapter, cIdx) => (
+                    <Card
+                      key={chapter.id || cIdx}
+                      className="border-slate-800/80 bg-slate-950/60 overflow-hidden"
+                    >
+                      <CardHeader className="py-3 px-4 bg-slate-900/40 border-b border-slate-800/60">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-xs font-semibold text-white flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-md bg-brand-500/20 text-brand-300 flex items-center justify-center text-[10px] font-bold">
+                              {cIdx + 1}
+                            </span>
+                            {chapter.title}
+                          </CardTitle>
+                          <span className="text-[11px] text-slate-500">
+                            {chapter.topics?.length || 0} Topics
                           </span>
-                        </CardTitle>
+                        </div>
                       </CardHeader>
-                      <CardContent className="p-4 pt-1 space-y-2">
-                        {chapter.topics.map((topic) => (
-                          <div
-                            key={topic.id}
-                            onClick={() => openStudyStudio(topic)}
-                            className="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 hover:bg-slate-900 border border-slate-800/40 hover:border-brand-500/40 cursor-pointer transition-all group"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <button
-                                onClick={(e) => toggleTopic(topic.id, e)}
-                                className="shrink-0 p-0.5"
-                                title={topic.completed ? "Mark incomplete" : "Mark completed"}
-                              >
-                                {topic.completed ? (
-                                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                ) : (
-                                  <Circle className="w-4 h-4 text-slate-600 group-hover:text-slate-400" />
-                                )}
-                              </button>
-                              <span
-                                className={`text-xs ${
-                                  topic.completed
-                                    ? "text-slate-400 line-through"
-                                    : "text-slate-200 group-hover:text-white font-medium"
-                                } truncate`}
-                              >
-                                {topic.title}
-                              </span>
-                            </div>
 
-                            <div className="flex items-center gap-2 shrink-0">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openStudyStudio(topic);
-                                }}
-                                className="text-[10px] text-brand-400 hover:text-brand-300 px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/20 transition-colors flex items-center gap-1"
-                              >
-                                <Brain className="w-3 h-3" /> Study Studio
-                              </button>
+                      <CardContent className="p-3 space-y-2">
+                        {chapter.topics && chapter.topics.length > 0 ? (
+                          chapter.topics.map((topic) => (
+                            <div
+                              key={topic.id}
+                              onClick={() => openStudyStudio(topic)}
+                              className="p-2.5 rounded-xl bg-slate-900/50 hover:bg-slate-900 border border-slate-800/60 hover:border-brand-500/40 flex items-center justify-between cursor-pointer transition-all group"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <button
+                                  onClick={(e) => toggleTopicCompletion(topic.id, topic.completed, e)}
+                                  className="text-slate-500 hover:text-emerald-400 transition-colors shrink-0"
+                                  title={topic.completed ? "Mark incomplete" : "Mark completed"}
+                                >
+                                  {topic.completed ? (
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-400 fill-emerald-400/20" />
+                                  ) : (
+                                    <Circle className="w-4 h-4 text-slate-600 group-hover:text-slate-400" />
+                                  )}
+                                </button>
+                                <span
+                                  className={`text-xs font-medium truncate ${
+                                    topic.completed
+                                      ? "line-through text-slate-500"
+                                      : "text-slate-200 group-hover:text-white"
+                                  }`}
+                                >
+                                  {topic.title}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[11px] text-brand-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 font-semibold">
+                                  Study Studio <ChevronRight className="w-3.5 h-3.5" />
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          ))
+                        ) : (
+                          <p className="text-xs text-slate-500 p-2 text-center">
+                            No topics added in this chapter.
+                          </p>
+                        )}
                       </CardContent>
                     </Card>
                   ))}
                 </div>
               ) : (
-                <div className="py-8 text-center text-xs text-slate-500">
-                  No chapters defined yet for this subject.
+                <div className="p-8 rounded-2xl border border-slate-800 bg-slate-950/40 text-center space-y-3">
+                  <p className="text-xs text-slate-400">
+                    No syllabus hierarchy in this subject yet.
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setSyllabusPrompt(selectedCourse.title);
+                      setAiSyllabusModalOpen(true);
+                    }}
+                    className="bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs gap-1.5"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" />
+                    Auto-Generate Complete Units with AI
+                  </Button>
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="lg:col-span-8 py-16 text-center text-slate-500 space-y-2">
-            <BookOpen className="w-12 h-12 text-slate-700 mx-auto" />
-            <p className="text-sm">Select a course to view syllabus and study materials.</p>
+          <div className="lg:col-span-8 flex flex-col items-center justify-center p-12 text-center border border-slate-800 rounded-3xl bg-slate-950/40 space-y-3">
+            <BookOpen className="w-10 h-10 text-slate-600" />
+            <h3 className="text-base font-semibold text-white">Select a Course</h3>
+            <p className="text-xs text-slate-400 max-w-sm">
+              Choose an enrolled course from the sidebar to inspect its syllabus, upload lecture notes, or generate mock exams.
+            </p>
           </div>
         )}
       </div>
 
-      {/* Topic Study Studio Modal */}
-      <Dialog open={studyStudioOpen} onOpenChange={setStudyStudioOpen}>
-        <DialogContent className="max-w-3xl bg-slate-950 border-white/[0.08] text-white max-h-[85vh] overflow-y-auto">
+      {/* AI Auto-Generate Syllabus Modal */}
+      <Dialog open={aiSyllabusModalOpen} onOpenChange={setAiSyllabusModalOpen}>
+        <DialogContent className="max-w-lg bg-slate-950 border-white/[0.08] text-white">
           <DialogHeader>
-            <div className="flex items-center gap-2">
-              <Badge variant="brand" className="text-[10px]">
-                TOPIC STUDY STUDIO
-              </Badge>
-              {topicBreakdown?.verifiedSource && (
-                <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-mono">
-                  <BookmarkCheck className="w-3.5 h-3.5" /> Cited from: {topicBreakdown.verifiedSource.fileName}
-                </span>
-              )}
-            </div>
-            <DialogTitle className="text-xl font-bold text-white mt-1">
-              {activeTopic?.title}
+            <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+              <Wand2 className="w-5 h-5 text-purple-400" /> AI Syllabus & Curriculum Builder
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-400">
-              Interactive AI breakdown, exam marking schemes, and personal student scratchpad.
+              Enter any course title or syllabus keywords. AI will automatically construct a complete semester-ready hierarchy with Units, Chapters, and High-Yield Topics.
             </DialogDescription>
           </DialogHeader>
 
-          {/* Studio Tab Switcher */}
-          <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-slate-900 border border-white/[0.06] text-xs mt-2">
-            <button
-              onClick={() => setActiveStudioTab("breakdown")}
-              className={`py-2 rounded-lg font-medium transition-all ${
-                activeStudioTab === "breakdown" ? "bg-brand-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
-              }`}
-            >
-              🧠 AI Breakdown & 5-Marker
-            </button>
-            <button
-              onClick={() => setActiveStudioTab("notes")}
-              className={`py-2 rounded-lg font-medium transition-all ${
-                activeStudioTab === "notes" ? "bg-brand-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
-              }`}
-            >
-              📝 My Scratchpad Notes
-            </button>
-            <button
-              onClick={() => setActiveStudioTab("quickcheck")}
-              className={`py-2 rounded-lg font-medium transition-all ${
-                activeStudioTab === "quickcheck" ? "bg-brand-600 text-white shadow-sm" : "text-slate-400 hover:text-white"
-              }`}
-            >
-              ❓ Diagnostic Check
-            </button>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Course Subject / Title *</label>
+              <input
+                type="text"
+                value={syllabusPrompt}
+                onChange={(e) => setSyllabusPrompt(e.target.value)}
+                placeholder="e.g. Distributed Systems & Cloud Computing"
+                className="w-full h-10 px-3.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+              />
+            </div>
+
+            {generatedSyllabusPreview && (
+              <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/30 text-xs text-purple-300 space-y-1.5 animate-in zoom-in-95">
+                <div className="font-semibold flex items-center gap-1.5 text-white">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  Syllabus Created: {generatedSyllabusPreview.title} ({generatedSyllabusPreview.code})
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  {generatedSyllabusPreview.subjects?.length || 0} Units populated directly into your course database.
+                </p>
+              </div>
+            )}
           </div>
 
+          <DialogFooter className="flex items-center justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAiSyllabusModalOpen(false)}
+              className="rounded-xl border-slate-800 text-slate-400 text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleGenerateSyllabus}
+              disabled={generatingSyllabus || !syllabusPrompt.trim()}
+              className="rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold shadow-md"
+            >
+              {generatingSyllabus ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />
+                  Constructing Syllabus...
+                </>
+              ) : (
+                "Generate & Save Syllabus"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* AI Mock Exam Simulator Modal */}
+      <Dialog open={mockExamModalOpen} onOpenChange={setMockExamModalOpen}>
+        <DialogContent className="max-w-4xl bg-slate-950 border-white/[0.08] text-white max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-rose-400" />
+                  University Mock Examination Paper
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-400 mt-0.5">
+                  Simulate official university semester examinations under timed conditions with model solutions.
+                </DialogDescription>
+              </div>
+
+              {/* Exam Timer & Mode Controls */}
+              {mockExamPaper && (
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <div
+                    className={`px-3 py-1.5 rounded-xl border flex items-center gap-2 text-xs font-mono font-bold ${
+                      examSecondsLeft < 600
+                        ? "bg-rose-500/20 border-rose-500/40 text-rose-300 animate-pulse"
+                        : "bg-slate-900 border-slate-800 text-slate-200"
+                    }`}
+                  >
+                    <Clock className="w-3.5 h-3.5 text-rose-400" />
+                    <span>{formatTime(examSecondsLeft)}</span>
+                  </div>
+
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowModelSolutions(!showModelSolutions)}
+                    className={`rounded-xl text-xs gap-1.5 ${
+                      showModelSolutions
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                        : "border-slate-800 text-slate-300"
+                    }`}
+                  >
+                    {showModelSolutions ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    {showModelSolutions ? "Hide Marking Guide" : "Reveal Solutions"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </DialogHeader>
+
+          {generatingMockExam ? (
+            <div className="py-16 flex flex-col items-center justify-center space-y-3">
+              <Loader2 className="w-8 h-8 animate-spin text-rose-400" />
+              <p className="text-sm text-slate-300 font-medium">
+                Generating Authentic University Exam Paper...
+              </p>
+              <p className="text-xs text-slate-500">
+                Synthesizing Section A (2-marks), Section B (5-marks), and Section C (10-marks)...
+              </p>
+            </div>
+          ) : mockExamPaper ? (
+            <div className="space-y-6 py-2">
+              {/* Exam Paper Header Sheet */}
+              <div className="p-5 rounded-2xl bg-slate-900/90 border border-white/[0.08] text-center space-y-2 relative overflow-hidden">
+                <div className="text-[11px] uppercase tracking-widest text-slate-400 font-bold">
+                  University Examination Board • Academic Semester
+                </div>
+                <h3 className="text-lg font-bold text-white tracking-tight">
+                  {mockExamPaper.title}
+                </h3>
+                <div className="flex items-center justify-center gap-4 text-xs text-slate-300 pt-1 font-mono">
+                  <span>Course Code: <strong>{mockExamPaper.courseCode}</strong></span>
+                  <span>•</span>
+                  <span>Duration: <strong>{mockExamPaper.durationMinutes} Mins</strong></span>
+                  <span>•</span>
+                  <span>Max Marks: <strong>{mockExamPaper.totalMarks}</strong></span>
+                </div>
+
+                {/* Instructions */}
+                {mockExamPaper.instructions && (
+                  <div className="mt-3 pt-3 border-t border-slate-800/80 text-left">
+                    <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                      General Instructions:
+                    </div>
+                    <ul className="text-xs text-slate-400 space-y-0.5 list-disc list-inside">
+                      {mockExamPaper.instructions.map((inst: string, i: number) => (
+                        <li key={i}>{inst}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Sections & Questions */}
+              {mockExamPaper.sections?.map((sec: any, sIdx: number) => (
+                <div key={sIdx} className="space-y-3">
+                  <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-brand-300 uppercase tracking-wider">
+                        {sec.sectionName}
+                      </h4>
+                      <p className="text-[11px] text-slate-400">{sec.description}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {sec.markPerQuestion} Marks Each
+                    </Badge>
+                  </div>
+
+                  <div className="space-y-3">
+                    {sec.questions?.map((q: any) => (
+                      <div
+                        key={q.id || q.questionNumber}
+                        className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-2.5">
+                            <span className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-800 text-slate-300 flex items-center justify-center text-xs font-bold shrink-0">
+                              Q{q.questionNumber}
+                            </span>
+                            <div>
+                              <p className="text-xs md:text-sm font-semibold text-white leading-relaxed">
+                                {q.question}
+                              </p>
+                              {q.topicsCovered && (
+                                <span className="inline-block text-[10px] text-slate-500 font-mono mt-1">
+                                  Topic: {q.topicsCovered}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] font-mono shrink-0">
+                            [{sec.markPerQuestion}M]
+                          </Badge>
+                        </div>
+
+                        {/* Student Scratchpad Answer Area */}
+                        <div className="space-y-1">
+                          <textarea
+                            rows={3}
+                            value={studentAnswers[q.id || q.questionNumber] || ""}
+                            onChange={(e) =>
+                              setStudentAnswers({
+                                ...studentAnswers,
+                                [q.id || q.questionNumber]: e.target.value,
+                              })
+                            }
+                            placeholder="Type your exam answer here..."
+                            className="w-full p-3 rounded-xl bg-slate-900/80 border border-slate-800 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none font-mono"
+                          />
+                        </div>
+
+                        {/* Model Solution & Marking Rubric (Revealable) */}
+                        {showModelSolutions && (
+                          <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-2 animate-in fade-in-50">
+                            <div className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Model Answer & Scoring Blueprint:
+                            </div>
+                            <div className="text-slate-300 leading-relaxed">
+                              <MarkdownRenderer content={q.modelAnswer} />
+                            </div>
+                            {q.markingRubric && q.markingRubric.length > 0 && (
+                              <div className="pt-2 border-t border-emerald-500/20 text-[11px] text-slate-400">
+                                <span className="font-semibold text-emerald-300">Marking Rubric:</span>
+                                <ul className="list-disc list-inside mt-0.5 space-y-0.5">
+                                  {q.markingRubric.map((r: string, idx: number) => (
+                                    <li key={idx}>{r}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Topic Study Studio Modal */}
+      <Dialog open={studyStudioOpen} onOpenChange={setStudyStudioOpen}>
+        <DialogContent className="max-w-4xl bg-slate-950 border-white/[0.08] text-white max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-brand-400" />
+                  Topic Study Studio: {activeTopic?.title}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-400 mt-0.5">
+                  Comprehensive conceptual breakdowns, 5-marker blueprints, and auto-saving personal notes.
+                </DialogDescription>
+              </div>
+
+              {/* Study Studio Tabs */}
+              <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+                <button
+                  onClick={() => setActiveStudioTab("breakdown")}
+                  className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                    activeStudioTab === "breakdown" ? "bg-brand-600 text-white" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  AI Blueprint
+                </button>
+                <button
+                  onClick={() => setActiveStudioTab("notes")}
+                  className={`px-3 py-1 rounded-lg font-medium transition-all ${
+                    activeStudioTab === "notes" ? "bg-brand-600 text-white" : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  My Notes
+                </button>
+              </div>
+            </div>
+          </DialogHeader>
+
           {loadingBreakdown ? (
-            <div className="py-12 flex flex-col items-center justify-center space-y-2">
+            <div className="py-16 flex flex-col items-center justify-center space-y-2">
               <Loader2 className="w-6 h-6 animate-spin text-brand-400" />
-              <p className="text-xs text-slate-400">Generating structured topic breakdown from notes...</p>
+              <p className="text-xs text-slate-400">Loading topic studio breakdown...</p>
+            </div>
+          ) : activeStudioTab === "breakdown" && topicBreakdown ? (
+            <div className="space-y-4 py-2">
+              {/* Intuition & Analogy */}
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
+                <h4 className="text-xs font-bold text-brand-300 uppercase tracking-wider flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-brand-400" /> Intuition & Mental Model
+                </h4>
+                <p className="text-xs text-slate-300 leading-relaxed">{topicBreakdown.intuition}</p>
+                {topicBreakdown.realWorldAnalogy && (
+                  <div className="p-2.5 rounded-xl bg-brand-500/10 border border-brand-500/20 text-xs text-brand-200">
+                    <strong>Analogy:</strong> {topicBreakdown.realWorldAnalogy}
+                  </div>
+                )}
+              </div>
+
+              {/* 5-Marker University Format */}
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
+                <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5 text-amber-400" /> 5-Mark University Answer Structure
+                </h4>
+                <div className="text-xs text-slate-300 leading-relaxed">
+                  <MarkdownRenderer content={topicBreakdown.fiveMarkerAnswer} />
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="py-4 space-y-4">
-              {activeStudioTab === "breakdown" && topicBreakdown && (
-                <div className="space-y-4 animate-in fade-in-50">
-                  {/* Intuition Box */}
-                  <div className="p-4 rounded-2xl bg-slate-900/80 border border-white/[0.06] space-y-2">
-                    <h4 className="text-xs font-semibold text-brand-300 uppercase tracking-wider">
-                      Conceptual Intuition & Analogy
-                    </h4>
-                    <p className="text-xs text-slate-200 leading-relaxed">
-                      {topicBreakdown.intuition.summary}
-                    </p>
-                    <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 text-[11px] text-amber-300 italic">
-                      💡 {topicBreakdown.intuition.keyAnalogy}
-                    </div>
-                  </div>
-
-                  {/* Exam 5-Marker Blueprint */}
-                  <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-brand-950/40 border border-brand-500/30 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                        <Award className="w-4 h-4 text-brand-400" /> Exam 5/10-Mark Answer Blueprint
-                      </h4>
-                      <Badge variant="brand" className="text-[10px]">
-                        Marking Criteria
-                      </Badge>
-                    </div>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                      {topicBreakdown.examBlueprint.markingScheme.map((item: any, idx: number) => (
-                        <div key={idx} className="p-2 rounded-lg bg-slate-950 border border-slate-800">
-                          <span className="font-bold text-brand-400 block">{item.marks}</span>
-                          <span className="text-slate-300 text-[10px]">{item.item}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="pt-2">
-                      <MarkdownRenderer content={topicBreakdown.examBlueprint.idealAnswer} />
-                    </div>
-                  </div>
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300">
+                    Personal Topic Scratchpad (Markdown Supported)
+                  </label>
+                  <Button
+                    size="sm"
+                    onClick={saveTopicNote}
+                    disabled={savingNote}
+                    className="h-7 text-xs bg-brand-600 hover:bg-brand-500 text-white rounded-lg"
+                  >
+                    {savingNote ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                    Save Notes
+                  </Button>
                 </div>
-              )}
-
-              {activeStudioTab === "notes" && (
-                <div className="space-y-3 animate-in fade-in-50">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Write your personal summary, notes, or code snippets for this topic:</span>
-                    <Button
-                      size="sm"
-                      onClick={saveTopicNote}
-                      disabled={savingNote}
-                      className="h-8 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs gap-1"
-                    >
-                      {savingNote ? <Loader2 className="w-3 h-3 animate-spin" /> : <Edit3 className="w-3 h-3" />}
-                      Save Notes
-                    </Button>
-                  </div>
-                  <textarea
-                    rows={8}
-                    value={topicNoteContent}
-                    onChange={(e) => setTopicNoteContent(e.target.value)}
-                    placeholder="# My Notes on this Topic&#10;- Important theorem...&#10;- Example..."
-                    className="w-full p-4 rounded-2xl bg-slate-900 border border-white/[0.08] text-xs md:text-sm text-white focus:outline-none focus:ring-1 focus:ring-brand-500 font-mono resize-none leading-relaxed"
-                  />
-                </div>
-              )}
-
-              {activeStudioTab === "quickcheck" && topicBreakdown && (
-                <div className="space-y-3 animate-in fade-in-50">
-                  <p className="text-xs text-slate-400">
-                    Test your instant comprehension with this diagnostic question:
-                  </p>
-                  {topicBreakdown.quickCheck.map((qc: any, qIdx: number) => (
-                    <div key={qIdx} className="p-4 rounded-2xl bg-slate-900 border border-white/[0.06] space-y-3">
-                      <h4 className="text-xs font-semibold text-white">{qc.question}</h4>
-                      <div className="space-y-2">
-                        {qc.options.map((opt: string, oIdx: number) => (
-                          <div
-                            key={oIdx}
-                            className={`p-2.5 rounded-xl border text-xs cursor-pointer ${
-                              opt === qc.correctAnswer
-                                ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-300 font-medium"
-                                : "bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-900"
-                            }`}
-                          >
-                            {opt}
-                          </div>
-                        ))}
-                      </div>
-                      <p className="text-[11px] text-slate-400 italic pt-1">
-                        💡 {qc.explanation}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
+                <textarea
+                  rows={10}
+                  value={topicNoteContent}
+                  onChange={(e) => setTopicNoteContent(e.target.value)}
+                  placeholder="Record your personal notes, formulas, professor tips, and exam insights here..."
+                  className="w-full p-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-brand-500 resize-none font-mono"
+                />
+              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
 
-      {/* Course Cheat Sheet Modal */}
+      {/* Cheat Sheet Modal */}
       <Dialog open={cheatSheetOpen} onOpenChange={setCheatSheetOpen}>
         <DialogContent className="max-w-3xl bg-slate-950 border-white/[0.08] text-white max-h-[85vh] overflow-y-auto">
           <DialogHeader>

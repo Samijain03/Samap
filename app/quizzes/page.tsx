@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { FlashcardsDeck } from "@/components/study/FlashcardsDeck";
+import { Layers } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -43,6 +45,7 @@ function QuizzesContent() {
   const [loading, setLoading] = useState(true);
 
   // Active Test Player State
+  const [activeHubTab, setActiveHubTab] = useState<"quizzes" | "flashcards">("quizzes");
   const [currentQuestionIdx, setCurrentQuestionIdx] = useState(0);
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
   const [testCompleted, setTestCompleted] = useState(false);
@@ -222,8 +225,37 @@ function QuizzesContent() {
         </Button>
       </div>
 
-      {/* Active Quiz Player View OR Quiz Deck Listing */}
-      {activeQuiz ? (
+      {/* Hub Mode Tabs */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-950/80 border border-slate-800 w-fit">
+        <button
+          onClick={() => setActiveHubTab("quizzes")}
+          className={`px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all flex items-center gap-2 ${
+            activeHubTab === "quizzes"
+              ? "bg-amber-600 text-white shadow-md shadow-amber-600/20"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Award className="w-4 h-4" />
+          Practice Quizzes
+        </button>
+        <button
+          onClick={() => setActiveHubTab("flashcards")}
+          className={`px-4 py-2 rounded-xl text-xs md:text-sm font-semibold transition-all flex items-center gap-2 ${
+            activeHubTab === "flashcards"
+              ? "bg-purple-600 text-white shadow-md shadow-purple-600/20"
+              : "text-slate-400 hover:text-white"
+          }`}
+        >
+          <Layers className="w-4 h-4" />
+          Active Recall Flashcards (SRS)
+        </button>
+      </div>
+
+      {activeHubTab === "flashcards" ? (
+        <div className="max-w-4xl mx-auto">
+          <FlashcardsDeck />
+        </div>
+      ) : activeQuiz ? (
         <div className="max-w-3xl mx-auto space-y-6">
           {/* Top Bar of Active Quiz */}
           <div className="flex items-center justify-between p-4 rounded-2xl bg-slate-900/80 border border-slate-800">

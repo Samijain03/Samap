@@ -18,6 +18,7 @@ import {
   ArrowRight,
   Brain,
   ListTodo,
+  Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -180,6 +181,56 @@ function ExamPlannerContent() {
     return days > 0 ? days : 0;
   };
 
+  const handleExportICS = (exam: ExamItem) => {
+    try {
+      const dtStart = new Date(exam.examDate).toISOString().replace(/-|:|\.\d+/g, "");
+      let icsContent = [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Samap//AI Study Companion//EN",
+        "CALSCALE:GREGORIAN",
+        "METHOD:PUBLISH",
+        "BEGIN:VEVENT",
+        `SUMMARY:🎯 Final Exam: ${exam.title}`,
+        `DESCRIPTION:Target Score: ${exam.targetScore || "Grade A"}\\nStrategy: ${exam.studyPlan?.strategy || "Revision Schedule"}\\nPowered by Samap AI`,
+        `DTSTART:${dtStart}`,
+        `DTEND:${dtStart}`,
+        "STATUS:CONFIRMED",
+        "END:VEVENT",
+      ];
+
+      if (exam.studyPlan?.dailySchedules) {
+        exam.studyPlan.dailySchedules.forEach((day, idx) => {
+          const taskDate = new Date();
+          taskDate.setDate(taskDate.getDate() + idx);
+          const taskDt = taskDate.toISOString().replace(/-|:|\.\d+/g, "");
+          icsContent.push(
+            "BEGIN:VEVENT",
+            `SUMMARY:📖 [Day ${day.day}] ${day.theme} (${exam.title})`,
+            `DESCRIPTION:Tasks:\\n${day.tasks.map((t) => "- " + t.task).join("\\n")}`,
+            `DTSTART:${taskDt}`,
+            `DTEND:${taskDt}`,
+            "END:VEVENT"
+          );
+        });
+      }
+
+      icsContent.push("END:VCALENDAR");
+
+      const blob = new Blob([icsContent.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${exam.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}-schedule.ics`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Calendar export error:", e);
+    }
+  };
+
   const calculatePlanProgress = (exam: ExamItem) => {
     const allTasks = exam.studyPlan?.dailySchedules.flatMap((d) => d.tasks) || [];
     if (allTasks.length === 0) return 0;
@@ -326,7 +377,17 @@ function ExamPlannerContent() {
                     </h2>
                   </div>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleExportICS(selectedExam)}
+                      className="border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs gap-1.5"
+                      title="Export calendar event (.ics)"
+                    >
+                      <Download className="w-3.5 h-3.5 text-blue-400" />
+                      Sync Calendar (.ics)
+                    </Button>
                     <Button
                       size="sm"
                       onClick={() => router.push(`/chat?prompt=Give me a 5-mark exam study guide for ${encodeURIComponent(selectedExam.title)}&action=exam-answer`)}

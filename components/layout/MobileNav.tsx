@@ -8,7 +8,8 @@ import {
   BookOpen,
   Map,
   Sparkles,
-  User,
+  Calendar,
+  Award,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,8 +17,8 @@ const mobileNavItems = [
   { name: "Home", href: "/", icon: LayoutDashboard },
   { name: "Courses", href: "/courses", icon: BookOpen },
   { name: "AI Chat", href: "/chat", icon: Sparkles, isCenter: true },
-  { name: "Roadmaps", href: "/roadmaps", icon: Map },
-  { name: "Profile", href: "/settings", icon: User },
+  { name: "Exams", href: "/exam-planner", icon: Calendar },
+  { name: "Quizzes", href: "/quizzes", icon: Award },
 ];
 
 export function MobileNav() {

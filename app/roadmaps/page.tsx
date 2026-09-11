@@ -21,6 +21,8 @@ import {
   Compass,
   Check,
   Trash2,
+  Download,
+  Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -45,6 +47,13 @@ function RoadmapsContent() {
   const [selectedRoadmap, setSelectedRoadmap] = useState<RoadmapItem | null>(null);
   const [selectedNode, setSelectedNode] = useState<RoadmapNodeItem | null>(null);
   const [nodeDetailModalOpen, setNodeDetailModalOpen] = useState(false);
+
+  // Practice Challenge State
+  const [challengeModalOpen, setChallengeModalOpen] = useState(false);
+  const [generatingChallenge, setGeneratingChallenge] = useState(false);
+  const [nodeChallenge, setNodeChallenge] = useState<any>(null);
+  const [showChallengeSolution, setShowChallengeSolution] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const [topicInput, setTopicInput] = useState("");
   const [targetRole, setTargetRole] = useState("");
@@ -176,6 +185,57 @@ function RoadmapsContent() {
     if (!roadmap.nodes || roadmap.nodes.length === 0) return 0;
     const completed = roadmap.nodes.filter((n) => n.status === "completed").length;
     return Math.round((completed / roadmap.nodes.length) * 100);
+  };
+
+  const handleGenerateChallenge = async (nodeTitle: string) => {
+    setChallengeModalOpen(true);
+    setGeneratingChallenge(true);
+    setShowChallengeSolution(false);
+    try {
+      const res = await fetch("/api/roadmaps/challenge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodeTitle }),
+      });
+      const data = await res.json();
+      setNodeChallenge(data.challenge || null);
+    } catch (err) {
+      console.error("Challenge generation error:", err);
+    } finally {
+      setGeneratingChallenge(false);
+    }
+  };
+
+  const handleExportRoadmapMarkdown = (roadmap: RoadmapItem) => {
+    let md = `# ${roadmap.title}\n\n`;
+    md += `**Target Role:** ${roadmap.targetRole || "Engineering Specialist"}\n`;
+    md += `**Estimated Duration:** ${roadmap.estimatedHours} Hours | **Difficulty:** ${roadmap.difficulty}\n\n`;
+    md += `---\n\n## 🗺️ Recommended Learning Sequence\n\n`;
+
+    roadmap.nodes?.forEach((n, idx) => {
+      const check = n.status === "completed" ? "[x]" : "[ ]";
+      md += `### ${idx + 1}. ${check} ${n.title} (${n.stage.toUpperCase()})\n`;
+      md += `- **Estimated Time:** ${n.estimatedHours} | **Difficulty:** ${n.difficulty}\n`;
+      md += `- **Overview:** ${n.description}\n`;
+      if (n.keyConcepts && n.keyConcepts.length > 0) {
+        md += `- **Core Concepts:** ${n.keyConcepts.join(", ")}\n`;
+      }
+      if (n.practiceTasks && n.practiceTasks.length > 0) {
+        md += `- **Practice Exercises:**\n`;
+        n.practiceTasks.forEach((t) => (md += `  - ${t}\n`));
+      }
+      md += `\n`;
+    });
+
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${roadmap.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}-roadmap.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -330,7 +390,17 @@ function RoadmapsContent() {
                   </h2>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleExportRoadmapMarkdown(selectedRoadmap)}
+                    className="border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-300 hover:text-white rounded-xl text-xs gap-1.5"
+                    title="Export roadmap as Markdown study checklist"
+                  >
+                    <Download className="w-3.5 h-3.5 text-emerald-400" />
+                    Export Plan (.md)
+                  </Button>
                   <Badge variant="outline" className="text-xs px-3 py-1 bg-slate-900">
                     {selectedRoadmap.nodes?.length || 0} Milestones
                   </Badge>
@@ -627,6 +697,16 @@ function RoadmapsContent() {
               <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
                 <Button
                   size="sm"
+                  variant="outline"
+                  onClick={() => handleGenerateChallenge(selectedNode.title)}
+                  className="border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-xl text-xs gap-1.5"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  AI Practice Challenge
+                </Button>
+
+                <Button
+                  size="sm"
                   onClick={() => {
                     setNodeDetailModalOpen(false);
                     router.push(`/chat?prompt=${encodeURIComponent(`Explain ${selectedNode.title} in depth with practical examples`)}`);
@@ -639,6 +719,117 @@ function RoadmapsContent() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Interactive Practice Challenge Modal */}
+      <Dialog open={challengeModalOpen} onOpenChange={setChallengeModalOpen}>
+        <DialogContent className="max-w-2xl bg-slate-950 border-white/[0.08] text-white max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-white flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-400" />
+              {nodeChallenge?.title || "Practical Engineering Challenge"}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">
+              Apply your theoretical knowledge with this hands-on implementation drill.
+            </DialogDescription>
+          </DialogHeader>
+
+          {generatingChallenge ? (
+            <div className="py-12 flex flex-col items-center justify-center space-y-2">
+              <Loader2 className="w-6 h-6 animate-spin text-amber-400" />
+              <p className="text-xs text-slate-400">Generating customized code challenge & problem statement...</p>
+            </div>
+          ) : nodeChallenge ? (
+            <div className="space-y-4 py-2">
+              {/* Difficulty & Est Time */}
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/40 bg-amber-500/10">
+                  {nodeChallenge.difficulty || "Intermediate"}
+                </Badge>
+                <span className="text-xs text-slate-400">
+                  Estimated Time: {nodeChallenge.estimatedMinutes || 30} mins
+                </span>
+              </div>
+
+              {/* Problem Statement */}
+              <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 space-y-2">
+                <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Problem Description
+                </h4>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  {nodeChallenge.problemStatement}
+                </p>
+                {nodeChallenge.requirements && nodeChallenge.requirements.length > 0 && (
+                  <div className="pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
+                    <span className="font-semibold text-slate-300">Requirements:</span>
+                    <ul className="list-disc list-inside mt-0.5 space-y-0.5">
+                      {nodeChallenge.requirements.map((req: string, idx: number) => (
+                        <li key={idx}>{req}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* Starter Code */}
+              {nodeChallenge.starterCode && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                      Starter Code
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(nodeChallenge.starterCode);
+                        setCopiedCode(true);
+                        setTimeout(() => setCopiedCode(false), 2000);
+                      }}
+                      className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1"
+                    >
+                      {copiedCode ? <Check className="w-3 h-3 text-emerald-400" /> : <Code className="w-3 h-3" />}
+                      {copiedCode ? "Copied!" : "Copy Code"}
+                    </button>
+                  </div>
+                  <pre className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-mono text-slate-200 overflow-x-auto">
+                    {nodeChallenge.starterCode}
+                  </pre>
+                </div>
+              )}
+
+              {/* Solution & Hints */}
+              <div className="pt-2 flex items-center justify-between">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowChallengeSolution(!showChallengeSolution)}
+                  className="rounded-xl border-slate-800 text-xs text-slate-300"
+                >
+                  {showChallengeSolution ? "Hide Solution" : "Reveal Hints & Explanation"}
+                </Button>
+              </div>
+
+              {showChallengeSolution && (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-xs space-y-2 animate-in fade-in-50">
+                  <div className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4" /> Solution Architecture & Hints
+                  </div>
+                  {nodeChallenge.hints && (
+                    <ul className="list-disc list-inside text-slate-300 space-y-1">
+                      {nodeChallenge.hints.map((h: string, idx: number) => (
+                        <li key={idx}>{h}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {nodeChallenge.solutionExplanation && (
+                    <p className="text-slate-300 pt-1 leading-relaxed">
+                      {nodeChallenge.solutionExplanation}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

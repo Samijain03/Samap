@@ -1,6 +1,12 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { SourceCitation, UserPreferences } from '@/lib/types';
-import { generateMockRoadmap, generateMockQuiz } from './mock-data';
+import {
+  generateMockRoadmap,
+  generateMockQuiz,
+  generateMockSyllabus,
+  generateMockExamPaper,
+  generateMockRoadmapChallenge,
+} from './mock-data';
 
 export interface GenerateChatOptions {
   prompt: string;
@@ -248,6 +254,163 @@ Return a JSON object with:
 
     return generateMockQuiz(topic, questionCount);
   }
+
+  /**
+   * Generates structured Syllabus & Curriculum JSON
+   */
+  async generateSyllabus(courseTitle: string, description?: string): Promise<any> {
+    if (this.geminiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(this.geminiKey);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-1.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+
+        const prompt = `Generate a rigorous, university-level curriculum and syllabus breakdown for a course titled "${courseTitle}"${
+          description ? ` with course description: "${description}"` : ''
+        }.
+Structure it into 3-4 cohesive Units/Subjects, each with 2-3 Chapters, and each Chapter with 2-4 specific, high-yield Topics with estimated study minutes and exam relevance (Essential, High, Medium).
+
+Return JSON adhering to this schema:
+{
+  "title": string,
+  "code": string,
+  "description": string,
+  "subjects": [
+    {
+      "title": string,
+      "description": string,
+      "chapters": [
+        {
+          "title": string,
+          "topics": [
+            {
+              "title": string,
+              "description": string,
+              "estimatedMinutes": number,
+              "examRelevance": "Essential" | "High" | "Medium"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}`;
+
+        const result = await model.generateContent(prompt);
+        return JSON.parse(result.response.text());
+      } catch (err) {
+        console.warn('Gemini Syllabus generation error:', err);
+      }
+    }
+
+    return generateMockSyllabus(courseTitle, description);
+  }
+
+  /**
+   * Generates a complete University Mock Exam Paper
+   */
+  async generateMockExam(params: {
+    courseTitle: string;
+    courseCode?: string;
+    topicsList?: string[];
+    durationMinutes?: number;
+    totalMarks?: number;
+  }): Promise<any> {
+    const { courseTitle, courseCode = 'ENG-401', topicsList, durationMinutes = 180, totalMarks = 100 } = params;
+
+    if (this.geminiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(this.geminiKey);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-1.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+
+        const prompt = `Generate an authentic university semester final examination paper for "${courseTitle}" (Course Code: ${courseCode}).
+Duration: ${durationMinutes} minutes, Total Marks: ${totalMarks}.
+${topicsList && topicsList.length > 0 ? `Covering topics: ${topicsList.join(', ')}\n` : ''}
+
+Structure the paper with:
+1. Section A: 3 Conceptual / 2-Mark short questions.
+2. Section B: 2 Analytical / 5-Mark structured questions with derivations/diagram guidelines.
+3. Section C: 1-2 Comprehensive / 10-Mark design / problem solving questions.
+
+For EVERY question, provide a complete 'modelAnswer' and 'markingRubric' array.
+
+Return JSON adhering to this schema:
+{
+  "title": string,
+  "courseTitle": string,
+  "courseCode": string,
+  "durationMinutes": number,
+  "totalMarks": number,
+  "instructions": string[],
+  "sections": [
+    {
+      "sectionName": string,
+      "description": string,
+      "markPerQuestion": number,
+      "questions": [
+        {
+          "id": string,
+          "questionNumber": number,
+          "question": string,
+          "topicsCovered": string,
+          "modelAnswer": string,
+          "markingRubric": string[]
+        }
+      ]
+    }
+  ]
+}`;
+
+        const result = await model.generateContent(prompt);
+        return JSON.parse(result.response.text());
+      } catch (err) {
+        console.warn('Gemini Mock Exam generation error:', err);
+      }
+    }
+
+    return generateMockExamPaper(courseTitle, courseCode);
+  }
+
+  /**
+   * Generates interactive practice challenge for a roadmap milestone
+   */
+  async generateRoadmapChallenge(nodeTitle: string): Promise<any> {
+    if (this.geminiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(this.geminiKey);
+        const model = genAI.getGenerativeModel({
+          model: 'gemini-1.5-flash',
+          generationConfig: { responseMimeType: 'application/json' },
+        });
+
+        const prompt = `Generate a practical, real-world coding and conceptual challenge for the topic "${nodeTitle}".
+Return JSON adhering to this schema:
+{
+  "title": string,
+  "difficulty": "Beginner" | "Intermediate" | "Advanced",
+  "estimatedMinutes": number,
+  "problemStatement": string,
+  "requirements": string[],
+  "starterCode": string,
+  "hints": string[],
+  "solutionExplanation": string
+}`;
+
+        const result = await model.generateContent(prompt);
+        return JSON.parse(result.response.text());
+      } catch (err) {
+        console.warn('Gemini Roadmap Challenge generation error:', err);
+      }
+    }
+
+    return generateMockRoadmapChallenge(nodeTitle);
+  }
+
 
   /**
    * Generates smart, high-yield contextual study answers when running in keyless/offline demo mode
